@@ -1801,3 +1801,316 @@ def export_r8b(path):
     bpy.ops.export_scene.fbx(filepath=path, use_selection=True, object_types={'MESH'}, apply_unit_scale=True,
                              mesh_smooth_type='FACE', use_mesh_modifiers=True, axis_forward='-Z', axis_up='Y')
     return [o.name for o in sel]
+
+# ---------------------------------------------------------------- pass 9: big lush close islands, aqueduct + rotunda ruins,
+# wide falls, mid-distance architecture (Guild facade, domed palace, grey tower), Summon two-storey facade, thin Story
+# ring, flat leaf spills, own 3D sign letters. Freestyle from the live-reference pictures and verify6_plaza.md.
+# Only these pieces (plus the 10-stud cube) go into ae_kit_r9.fbx; build_plaza.lua merges them into Kit.
+def build_island9(seed=91, R=50.0, k=0.56):
+    """Floating island, pass 9: a 100 x ~56 slab (top at y 0) with a 26-deep faceted rock underside and hanging spikes,
+    a THICK grass cap whose skirt droops 2-5 studs over the rim (jagged), and 7 dense vine curtains 10-20 long.
+    Ruins, trees and falls are separate kit pieces placed on it in Studio."""
+    random.seed(seed); clear_piece(f"K_Isl{seed}_"); clear_piece("Q_")
+    ph = [random.uniform(0, 6.28) for _ in range(3)]; n = 44
+    fr = [1 + 0.15 * math.sin(2 * a + ph[0]) + 0.10 * math.sin(3 * a + ph[1]) + 0.06 * math.sin(5 * a + ph[2]) + random.uniform(-0.05, 0.05)
+          for a in [2 * math.pi * i / n for i in range(n)]]
+    rim = lambda i, s: (R * fr[i % n] * s * math.cos(2 * math.pi * i / n), R * k * fr[i % n] * s * math.sin(2 * math.pi * i / n))
+    lev = [(1.0, 0.0), (0.96, -4.0), (0.84, -9.0), (0.64, -15.0), (0.42, -21.0), (0.18, -26.0)]
+    bm = bmesh.new(); rings = []
+    for li, (s, y) in enumerate(lev):
+        ring = []
+        for i in range(n):
+            x, z = rim(i, s)
+            if li >= 2:
+                f = random.uniform(0.88, 1.12); x *= f; z *= f; yy = y + random.uniform(-3.0, 3.0)
+            else:
+                yy = y
+            ring.append(bm.verts.new((x, yy, z)))
+        rings.append(ring)
+    bot = bm.verts.new((0, -29.0, 0)); topc = bm.verts.new((0, 0.0, 0))
+    for li in range(len(rings) - 1):
+        for i in range(n):
+            j = (i + 1) % n; bm.faces.new((rings[li][i], rings[li][j], rings[li + 1][j], rings[li + 1][i]))
+    for i in range(n):
+        bm.faces.new((rings[-1][i], rings[-1][(i + 1) % n], bot)); bm.faces.new((rings[0][(i + 1) % n], rings[0][i], topc))
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+    rock = [flat(bm_obj("Q_rock", bm))]
+    for kk in range(9):
+        i = random.randrange(n); s = random.uniform(0.3, 0.75); x, z = rim(i, s); L = random.uniform(8, 20)
+        y0 = -8 - 18 * (1 - s)
+        rock.append(flat(lathe_at(f"Q_sp{kk}", [(0, y0 + 1), (random.uniform(3, 6), y0 + 1), (random.uniform(1.0, 2.0), y0 - L * 0.6), (0, y0 - L)], (x, 0, z), 5, False)))
+    cap = bmesh.new(); ct = cap.verts.new((0, 3.2, 0)); R1, R2_, R3, R4 = [], [], [], []
+    for i in range(n):
+        x, z = rim(i, 0.9); R1.append(cap.verts.new((x, 3.0 + random.uniform(-0.4, 0.6), z)))
+        x, z = rim(i, 1.05); R2_.append(cap.verts.new((x, 1.6, z)))
+        x, z = rim(i, 1.07); R3.append(cap.verts.new((x, -0.8, z)))
+        x, z = rim(i, 1.035); R4.append(cap.verts.new((x, -random.uniform(2.0, 5.0), z)))  # jagged drooping skirt
+    for i in range(n):
+        j = (i + 1) % n
+        cap.faces.new((ct, R1[j], R1[i])); cap.faces.new((R1[i], R1[j], R2_[j], R2_[i]))
+        cap.faces.new((R2_[i], R2_[j], R3[j], R3[i])); cap.faces.new((R3[i], R3[j], R4[j], R4[i]))
+    bmesh.ops.recalc_face_normals(cap, faces=cap.faces)
+    vines = bmesh.new()
+    for c in range(7):
+        i0 = random.randrange(n)
+        for m in range(11):
+            a = 2 * math.pi * (i0 + (m - 5) * 0.25) / n
+            f = 1 + 0.15 * math.sin(2 * a + ph[0]) + 0.10 * math.sin(3 * a + ph[1]) + 0.06 * math.sin(5 * a + ph[2])
+            cx, cz = R * f * 1.06 * math.cos(a), R * k * f * 1.06 * math.sin(a)
+            nrm = Vector((cx, 0, cz / (k * k))).normalized(); tg = Vector((-nrm.z, 0, nrm.x)) * 0.6
+            L = random.uniform(10, 20) * (1 - abs(m - 5) / 9); c0 = Vector((cx, -1.0, cz))
+            ds_quad(vines, [c0 - tg, c0 + tg, c0 + tg * 0.3 + Vector((0, -L, 0)) - nrm * 1.2, c0 - tg * 0.3 + Vector((0, -L, 0)) - nrm * 1.2])
+    merge_objs(f"K_Isl{seed}_rock", rock); bm_obj(f"K_Isl{seed}_grass", cap, smooth=True); bm_obj(f"K_Isl{seed}_vine", vines)
+
+def build_aque9():
+    """Ruined aqueduct: 5 round-arched bays (8 wide, piers 13 tall), a deck with a parapet lip, the last bay broken.
+    Faces -Z, x lateral, about 40 long x 3.6 deep x 15 tall."""
+    clear_piece("K_Aque9_"); clear_piece("Q_")
+    st = []; inner = arch_outline(2.9, 8.0, 2.9, 2, 12)
+    for b in range(5):
+        top = 13.0 if b < 4 else 10.5
+        st.append(bay(f"Q_b{b}", inner, 4.0, top, 8.0, -1.8, 1.8, 'z', (-16 + 8 * b, 0, 0)))
+    st.append(rbox("Q_deck", 32.6, 1.2, 4.2, 0.2, 1, (-4.0, 13.6, 0)))
+    for s in (-1, 1): st.append(rbox(f"Q_lip{s}", 32.6, 0.9, 0.5, 0.1, 1, (-4.0, 14.6, s * 1.9)))
+    st.append(rbox("Q_stub", 3.0, 2.0, 3.6, 0.3, 1, (14.5, 11.5, 0)))
+    merge_objs("K_Aque9_white", st)
+
+def build_rot9():
+    """Domed rotunda: 2-step round base, 8 columns on r 6, an entablature ring and a dome, about 16 across x 24."""
+    clear_piece("K_Rot9_"); clear_piece("Q_")
+    st = [lathe_at("Q_base", [(0, 0), (8.0, 0), (8.0, 0.9), (7.2, 0.9), (7.2, 1.8), (0, 1.8)], (0, 0, 0), 32, False),
+          lathe_at("Q_ent", [(0, 12.0), (7.3, 12.0), (7.3, 13.6), (7.6, 13.9), (7.6, 14.5), (0, 14.5)], (0, 0, 0), 32, False),
+          lathe_at("Q_dome", [(0, 14.5), (6.8, 14.5), (6.4, 17.0), (5.0, 19.4), (2.8, 21.0), (0, 21.6)], (0, 0, 0), 32),
+          lathe_at("Q_lan", [(0, 21.2), (1.1, 21.2), (1.1, 23.0), (1.4, 23.2), (0, 24.0)], (0, 0, 0), 12, False)]
+    for i in range(8):
+        a = 2 * math.pi * i / 8
+        st.append(lathe_at(f"Q_c{i}", [(0, 1.8), (0.95, 1.8), (0.95, 2.4), (0.7, 2.8), (0.65, 11.2), (1.0, 11.6), (1.0, 12.0), (0, 12.0)], (6.0 * math.cos(a), 0, 6.0 * math.sin(a)), 10, False))
+    merge_objs("K_Rot9_white", st)
+
+def build_fall9(L=50.0, w0=7.0, w1=9.5, rows=12, cols=7):
+    """Wide waterfall: bowed double-sided sheet 7 wide at the lip, 9.5 at the foot, L long (top at y 0), drifting out as it
+    falls, with a broad foam lip and a mist cluster at the foot. Faces -Z."""
+    random.seed(93); clear_piece("K_Fall9_"); clear_piece("Q_")
+    bm = bmesh.new(); F = []; B = []
+    for r in range(rows + 1):
+        t = r / rows; y = -L * t; w = w0 + (w1 - w0) * t
+        rowF, rowB = [], []
+        for c in range(cols + 1):
+            u = c / cols - 0.5; x = u * w + 0.3 * math.sin(3 * t + c)
+            z = -1.6 * math.cos(math.pi * u) - 2.0 * t * t
+            rowF.append(bm.verts.new((x, y, z))); rowB.append(bm.verts.new((x, y, z + 0.2)))
+        F.append(rowF); B.append(rowB)
+    for r in range(rows):
+        for c in range(cols):
+            bm.faces.new((F[r][c], F[r][c + 1], F[r + 1][c + 1], F[r + 1][c]))
+            bm.faces.new((B[r][c], B[r + 1][c], B[r + 1][c + 1], B[r][c + 1]))
+    bm_obj("K_Fall9_fall", bm, smooth=True)
+    foam = bmesh.new()
+    for i in range(9):
+        a = 2 * math.pi * i / 9; rr = random.uniform(3.5, 6.0)
+        ico(foam, (4.0 * math.cos(a), -L - random.uniform(-1, 2), -3.0 + 3.0 * math.sin(a)), rr, 1, (1, 0.6, 1))
+    for i in range(4):
+        ico(foam, ((i - 1.5) * 2.0, 0.2, -1.8), 1.5, 1, (1.2, 0.6, 1))
+    bm_obj("K_Fall9_foam", foam, smooth=True)
+
+def arch_win(name, hw, hs, ry, loc, depth=0.6):
+    """Dark arched window/door slab (XY outline, extruded along Z), set just proud of a -Z facing wall."""
+    o = extrude_outline(name, arch_outline(hw, hs, ry, 2, 10), depth, 0.0); o.location = loc; flat(o); return o
+
+def build_guild9():
+    """Guild hall facade, about 50 wide x 46 tall x 12 deep, facing -Z: cream body with pilasters, three gold cornices,
+    a big arched portal, arched windows on 3 floors, a raised central attic with a pediment and two corner towers with
+    blue domes."""
+    clear_piece("K_Guild9_"); clear_piece("Q_")
+    cr, gd, dk, bl = [], [], [], []
+    cr.append(rbox("Q_body", 46.0, 33.0, 12.0, 0.4, 1, (0, 16.5, 6.0)))
+    for x in (-19.5, -13, -6.5, 6.5, 13, 19.5):
+        cr.append(rbox(f"Q_pil{x}", 1.8, 31.0, 1.0, 0.2, 1, (x, 16.0, -0.3)))
+    for y in (11.5, 22.5, 33.0):
+        gd.append(rbox(f"Q_cor{y}", 47.5, 1.0, 13.4, 0.2, 1, (0, y, 6.0)))
+    dk.append(arch_win("Q_door", 4.0, 5.5, 4.0, (0, 0, -0.1), 0.8))
+    gd.append(tube_along("Q_doorT", [(x, y, -0.6) for x, y in arch_outline(4.6, 5.5, 4.6, 2, 16)], 0.35))
+    for i, x in enumerate((-16.2, -9.7, 9.7, 16.2)):
+        dk.append(arch_win(f"Q_w1{i}", 1.6, 4.0, 1.6, (x, 2.5, -0.1)))
+    for i in range(7):
+        dk.append(arch_win(f"Q_w2{i}", 1.5, 4.5, 1.5, (-19.5 + 6.5 * i, 14.0, -0.1)))
+    for i in range(9):
+        dk.append(arch_win(f"Q_w3{i}", 1.0, 3.2, 1.0, (-20 + 5 * i, 25.0, -0.1)))
+    cr.append(rbox("Q_attic", 20.0, 7.0, 10.0, 0.3, 1, (0, 37.0, 6.0)))
+    cr.append(prism("Q_ped", [(-11, 40.5, 0.8), (11, 40.5, 0.8), (0.01, 46.0, 0.8), (-0.01, 46.0, 0.8)], (0, 0, 8.0)))
+    gd.append(rbox("Q_attB", 21.5, 0.8, 11.0, 0.2, 1, (0, 40.6, 6.0)))
+    gd.append(tube_along("Q_pedT", [(-11, 40.9, 0.6), (0, 46.3, 0.6), (11, 40.9, 0.6)], 0.4))
+    for s in (-1, 1):
+        cr.append(rbox(f"Q_tw{s}", 7.0, 40.0, 7.0, 0.3, 1, (s * 24.5, 20.0, 5.0)))
+        gd.append(rbox(f"Q_twB{s}", 8.0, 0.8, 8.0, 0.2, 1, (s * 24.5, 40.2, 5.0)))
+        bl.append(lathe_at(f"Q_twD{s}", [(0, 40.6), (3.6, 40.6), (3.4, 42.6), (2.4, 44.6), (0.8, 46.0), (0, 46.4)], (s * 24.5, 0, 5.0), 16))
+        gd.append(lathe_at(f"Q_twF{s}", [(0, 46.2), (0.35, 46.2), (0.1, 49.0), (0, 49.2)], (s * 24.5, 0, 5.0), 8, False))
+        for y in (8.0, 19.0, 30.0):
+            dk.append(arch_win(f"Q_tww{s}{int(y)}", 1.1, 3.4, 1.1, (s * 24.5, y, 1.4)))
+    merge_objs("K_Guild9_cream", cr); merge_objs("K_Guild9_gold", gd); merge_objs("K_Guild9_dark", dk); merge_objs("K_Guild9_blue", bl)
+
+def build_palace9():
+    """Domed palace, about 32 across x 48 tall: a cream block with arched windows on all 4 sides, a drum with windows,
+    a big blue dome with a gold lantern, 4 corner turrets with small blue domes."""
+    clear_piece("K_Palace9_"); clear_piece("Q_")
+    cr, gd, dk, bl = [], [], [], []
+    cr.append(rbox("Q_body", 24.0, 20.0, 24.0, 0.4, 1, (0, 10.0, 0)))
+    gd.append(rbox("Q_cor", 25.4, 1.0, 25.4, 0.2, 1, (0, 20.2, 0)))
+    gd.append(rbox("Q_cor2", 25.0, 0.7, 25.0, 0.2, 1, (0, 9.0, 0)))
+    for f in range(4):
+        a = math.pi / 2 * f
+        for x in (-6.5, 0.0, 6.5):
+            for y in (2.0, 11.5):
+                o = arch_win(f"Q_w{f}{int(x)}{int(y)}", 1.5 if x else 2.2, 4.0, 1.5 if x else 2.2, (0, 0, 0))
+                o.data.transform(Matrix.Rotation(a, 4, 'Y') @ Matrix.Translation((x, y, -12.05))); dk.append(o)
+    cr.append(lathe_at("Q_drum", [(0, 20.6), (9.0, 20.6), (9.0, 29.0), (9.6, 29.4), (9.6, 30.2), (0, 30.2)], (0, 0, 0), 32, False))
+    for i in range(12):
+        a = 2 * math.pi * i / 12
+        dk.append(rbox_rot(f"Q_dw{i}", 0.6, 5.0, 1.6, (8.85 * math.cos(a), 25.0, 8.85 * math.sin(a)), -a, 0.5, 2))
+    bl.append(lathe_at("Q_dome", [(0, 30.2), (9.4, 30.2), (9.0, 34.0), (7.4, 38.0), (4.4, 41.4), (0, 43.0)], (0, 0, 0), 32))
+    gd.append(lathe_at("Q_lan", [(0, 42.6), (1.2, 42.6), (1.2, 44.4), (0.5, 45.0), (0.15, 48.0), (0, 48.2)], (0, 0, 0), 12, False))
+    for sx in (-1, 1):
+        for sz in (-1, 1):
+            c = (sx * 12.0, 0, sz * 12.0)
+            cr.append(lathe_at(f"Q_t{sx}{sz}", [(0, 0), (3.2, 0), (3.2, 24.0), (3.6, 24.4), (3.6, 25.0), (0, 25.0)], c, 16, False))
+            bl.append(lathe_at(f"Q_td{sx}{sz}", [(0, 25.0), (3.3, 25.0), (3.0, 27.0), (1.8, 29.0), (0, 30.4)], c, 16))
+            gd.append(lathe_at(f"Q_tf{sx}{sz}", [(0, 30.2), (0.3, 30.2), (0.08, 32.4), (0, 32.5)], c, 6, False))
+    merge_objs("K_Palace9_cream", cr); merge_objs("K_Palace9_gold", gd); merge_objs("K_Palace9_dark", dk); merge_objs("K_Palace9_blue", bl)
+
+def build_tower9():
+    """Slender grey tower 8 x 8 x 74: a square shaft with cornice bands every 13, arched windows on 4 faces per level,
+    an open arched belfry and a steep 4-sided spire."""
+    clear_piece("K_Tower9_"); clear_piece("Q_")
+    st, dk, rf = [], [], []
+    st.append(rbox("Q_shaft", 8.0, 52.0, 8.0, 0.3, 1, (0, 26.0, 0)))
+    st.append(rbox("Q_plinth", 9.4, 2.0, 9.4, 0.2, 1, (0, 1.0, 0)))
+    for y in (13.0, 26.0, 39.0, 52.0):
+        st.append(rbox(f"Q_b{int(y)}", 9.0, 0.9, 9.0, 0.15, 1, (0, y, 0)))
+    for f in range(4):
+        a = math.pi / 2 * f
+        for y in (16.0, 29.0, 42.0):
+            o = arch_win(f"Q_w{f}{int(y)}", 1.1, 4.5, 1.1, (0, 0, 0))
+            o.data.transform(Matrix.Rotation(a, 4, 'Y') @ Matrix.Translation((0, y, -4.05))); dk.append(o)
+    inner = arch_outline(2.0, 4.0, 2.0, 2, 10)
+    for k, (ax, d0, d1) in enumerate((("z", -4.0, -3.2), ("z", 3.2, 4.0), ("x", -4.0, -3.2), ("x", 3.2, 4.0))):
+        st.append(bay(f"Q_bel{k}", inner, 4.0, 7.0, 4.0, d0, d1, ax, (0, 52.4, 0)))
+    st.append(rbox("Q_belT", 9.0, 0.9, 9.0, 0.15, 1, (0, 59.8, 0)))
+    sp = flat(lathe_at("Q_spire", [(0, 60.2), (6.0, 60.2), (0.2, 74.0), (0, 74.2)], (0, 0, 0), 4, False))
+    sp.rotation_euler = (0, math.pi / 4, 0); rf.append(sp)
+    merge_objs("K_Tower9_stone", st); merge_objs("K_Tower9_dark", dk); merge_objs("K_Tower9_roof", rf)
+
+def build_summon9():
+    """Summon hall, two-storey arcade facade 50 wide x 35 tall x 14 deep, facing -Z: 5 big arches below, 7 smaller above,
+    a blue band between the storeys, a gold frieze and an attic with a central pediment, dark back wall and body."""
+    clear_piece("K_Summon9_"); clear_piece("Q_")
+    cr, gd, dk, bl = [], [], [], []
+    inner1 = arch_outline(3.6, 6.0, 3.6, 2, 12)
+    for b in range(5):
+        cr.append(bay(f"Q_g{b}", inner1, 5.0, 12.0, 6.0, -1.2, 1.2, 'z', (-20 + 10 * b, 0, 0)))
+    inner2 = arch_outline(2.3, 4.6, 2.3, 2, 10)
+    hw2 = 50.0 / 14
+    for b in range(7):
+        cr.append(bay(f"Q_u{b}", inner2, hw2, 11.0, 4.6, -1.0, 1.0, 'z', (-25 + hw2 * (2 * b + 1), 13.4, 0)))
+    bl.append(rbox("Q_band", 51.0, 1.4, 3.0, 0.2, 1, (0, 12.7, 0)))
+    gd.append(rbox("Q_band2", 51.4, 0.4, 3.2, 0.1, 1, (0, 13.5, 0)))
+    gd.append(rbox("Q_fr", 51.6, 1.0, 3.4, 0.2, 1, (0, 24.9, 0)))
+    cr.append(rbox("Q_attic", 50.0, 4.0, 3.0, 0.3, 1, (0, 27.4, 0)))
+    gd.append(rbox("Q_attT", 51.0, 0.6, 3.4, 0.1, 1, (0, 29.6, 0)))
+    cr.append(prism("Q_ped", [(-9, 29.9, -1.2), (9, 29.9, -1.2), (0.01, 35.0, -1.2), (-0.01, 35.0, -1.2)], (0, 0, 2.4)))
+    gd.append(tube_along("Q_pedT", [(-9.3, 30.0, -1.4), (0, 35.3, -1.4), (9.3, 30.0, -1.4)], 0.35))
+    for x in (-25, -15, -5, 5, 15, 25):
+        gd.append(rbox(f"Q_pin{x}", 1.0, 1.2, 1.0, 0.1, 1, (x, 30.5, 0)))
+    dk.append(rbox("Q_back", 49.0, 28.0, 0.6, 0.1, 1, (0, 14.0, 4.0)))
+    cr.append(rbox("Q_body", 50.0, 30.0, 10.0, 0.3, 1, (0, 15.0, 9.4)))
+    merge_objs("K_Summon9_cream", cr); merge_objs("K_Summon9_gold", gd); merge_objs("K_Summon9_dark", dk); merge_objs("K_Summon9_blue", bl)
+
+def build_ring9():
+    """Story portal ring, thin ornate frame: inner r 7.4, outer r 9.4, 2.4 deep (the pass-7 ring read as a cannon
+    side-on), gold inner and outer trims front and back, 8 gem studs, a fan crest with a gem on top, two feet, and a dark
+    void disc. XY plane, faces -Z, centre y 10."""
+    clear_piece("K_Ring9_"); clear_piece("Q_")
+    C = 10.0; n = 64
+    circ = lambda r, k: (r * math.cos(2 * math.pi * k / n), C + r * math.sin(2 * math.pi * k / n))
+    sv = [_band_xy("Q_fr", [circ(9.4, k) for k in range(n + 1)], [circ(7.4, k) for k in range(n + 1)], -1.2, 1.2, 'z')]
+    gd = []
+    for z in (-1.3, 1.3):
+        gd.append(tube_along(f"Q_ti{z}", [circ(7.4, k) + (z,) for k in range(n)], 0.35, True))
+        gd.append(tube_along(f"Q_to{z}", [circ(9.4, k) + (z,) for k in range(n)], 0.35, True))
+    gm = []
+    for k in range(8):
+        a = 2 * math.pi * k / 8 + math.pi / 8
+        for z in (-1.4, 1.4):
+            g = flat(lathe_at(f"Q_g{k}{z}", [(0, -0.7), (0.7, 0), (0, 0.7)], (8.4 * math.cos(a), C + 8.4 * math.sin(a), z), 6, False))
+            g.rotation_euler = (math.pi / 2, 0, 0); gm.append(g)
+    fan = [(0.0, C + 9.0)]
+    for k in range(13):
+        a = math.pi * (0.2 + 0.6 * k / 12); r = 6.0 if k % 2 == 0 else 4.2
+        fan.append((r * math.cos(a), C + 9.0 + r * math.sin(a) * 0.9))
+    sv.append(flat(extrude_outline("Q_crest", fan, 1.6, 0.0)))
+    cg = flat(lathe_at("Q_cg", [(0, -1.2), (1.2, 0), (0, 1.2)], (0, C + 12.4, 0), 6, False)); cg.rotation_euler = (math.pi / 2, 0, 0); gm.append(cg)
+    for s in (-1, 1):
+        sv.append(prism(f"Q_ft{s}", [(s * 5.0, 0, -1.6), (s * 9.5, 0, -1.6), (s * 7.6, 3.4, -1.6), (s * 5.8, 3.0, -1.6)], (0, 0, 3.2)))
+    vd = [extrude_outline("Q_void", [circ(7.45, k) for k in range(n)], 0.3, 0.0)]
+    merge_objs("K_Ring9_silver", sv); merge_objs("K_Ring9_gold", gd); merge_objs("K_Ring9_gem", gm); merge_objs("K_Ring9_void", vd)
+
+def build_spill9(tag="Spill9", seed=95, R=4.5, n=70):
+    """Flat leaf spill (round 6: splashes, not mounds): a thin ragged base splash and leaf cards lying nearly flat, nothing
+    taller than about 0.4; denser in the middle, thinning to a ragged edge. Tinted per zone at placement."""
+    random.seed(seed); clear_piece(f"K_{tag}_")
+    A, B = bmesh.new(), bmesh.new()
+    m = 28; pts = []
+    for i in range(m):
+        a = 2 * math.pi * i / m; r = R * (0.55 + 0.25 * math.sin(3 * a + 1.0) + (0.25 if i % 2 else 0.0) * random.uniform(0.5, 1.0))
+        pts.append((r * math.cos(a), r * 0.8 * math.sin(a)))
+    ds_quad_fan = [A.verts.new((x, 0.08, z)) for x, z in pts]; c = A.verts.new((0, 0.1, 0))
+    for i in range(m): A.faces.new((c, ds_quad_fan[(i + 1) % m], ds_quad_fan[i]))
+    for i in range(n):
+        a = random.uniform(0, 2 * math.pi); r = R * 0.95 * math.sqrt(random.random()) ** 1.3
+        b = Vector((r * math.cos(a), 0.1, r * 0.8 * math.sin(a)))
+        d = Vector((math.cos(a + random.uniform(-0.8, 0.8)), random.uniform(0.02, 0.1), math.sin(a + random.uniform(-0.8, 0.8)))).normalized()
+        card(A, B, b, d, random.uniform(0.9, 1.6), 0.4, 0.02, 0, (0.15, 0.55, 0.45, 0.25, 0.0))
+    bmesh.ops.recalc_face_normals(A, faces=A.faces)
+    bm_obj(f"K_{tag}_leaf", A); bm_obj(f"K_{tag}_leafRim", B)
+
+def build_text9(tag, text, height, depth=1.0, font_path=r"C:\Windows\Fonts\georgiab.ttf", bevel=0.12):
+    """Own 3D sign letters: a Blender text object in a system font, extruded and bevelled, converted to mesh, centred on
+    the origin, cap height about `height` studs, in the XY plane reading from -Z (y up)."""
+    clear_piece(f"K_{tag}_")
+    cu = bpy.data.curves.new(f"{tag}_txt", "FONT"); cu.body = text
+    try: cu.font = bpy.data.fonts.load(font_path, check_existing=True)
+    except Exception: pass
+    cu.align_x = 'CENTER'; cu.align_y = 'CENTER'; cu.extrude = depth / 2; cu.bevel_depth = bevel; cu.bevel_resolution = 0
+    cu.resolution_u = 4
+    cu.size = height / 0.7
+    ob = bpy.data.objects.new(f"{tag}_tmp", cu); coll().objects.link(ob)
+    dg = bpy.context.evaluated_depsgraph_get(); me = bpy.data.meshes.new_from_object(ob.evaluated_get(dg))
+    bpy.data.objects.remove(ob, do_unlink=True); bpy.data.curves.remove(cu)
+    me.transform(Matrix.Rotation(math.pi, 4, 'Y'))  # text is authored reading from +Z: turn it to read from -Z
+    bm = bmesh.new(); bm.from_mesh(me); bpy.data.meshes.remove(me)
+    bmesh.ops.triangulate(bm, faces=bm.faces[:]); bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+    return bm_obj(f"K_{tag}_letters", bm)
+
+def build_scale9():
+    clear_piece("K_Scale9_"); return rbox("K_Scale9_stone", 10.0, 10.0, 10.0, 0.01, 1)
+
+def build_all9():
+    build_scale9()
+    build_island9(91, 50.0); build_island9(92, 56.0, 0.5)
+    build_aque9(); build_rot9(); build_fall9()
+    build_guild9(); build_palace9(); build_tower9(); build_summon9(); build_ring9(); build_spill9()
+    build_text9("TxtRaid9", "Raid", 5.6, 1.4); build_text9("TxtGuild9", "Guilds", 5.4, 1.2); build_text9("TxtSummon9", "Summon", 4.0)
+    build_text9("TxtStory9", "Story", 4.4); build_text9("TxtExp9", "Expeditions", 3.0); build_text9("TxtBoss9", "Boss Rush", 2.6)
+
+R9_PREFIXES = ("K_Scale9_", "K_Isl91_", "K_Isl92_", "K_Aque9_", "K_Rot9_", "K_Fall9_", "K_Guild9_", "K_Palace9_", "K_Tower9_",
+               "K_Summon9_", "K_Ring9_", "K_Spill9_", "K_TxtRaid9_", "K_TxtGuild9_", "K_TxtSummon9_", "K_TxtStory9_", "K_TxtExp9_", "K_TxtBoss9_")
+
+def export_r9(path):
+    """Z-up + UVs (new pieces only), then export ONLY the pass-9 pieces; Studio merges them into Kit."""
+    to_zup_and_uv()
+    bpy.ops.object.select_all(action='DESELECT')
+    sel = [o for o in bpy.data.objects if o.type == 'MESH' and o.name.startswith(R9_PREFIXES)]
+    for o in sel: o.select_set(True)
+    bpy.context.view_layer.objects.active = sel[0]
+    bpy.ops.export_scene.fbx(filepath=path, use_selection=True, object_types={'MESH'}, apply_unit_scale=True,
+                             mesh_smooth_type='FACE', use_mesh_modifiers=True, axis_forward='-Z', axis_up='Y')
+    return [o.name for o in sel]

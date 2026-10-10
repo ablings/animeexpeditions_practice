@@ -11,7 +11,8 @@ local kit = SS:FindFirstChild("Kit")
 -- scale from a piece of known size. r7 was a full kit (replaces Kit; the dais is 40 across); from r8 on a kit holds only
 -- the new pieces plus a 10-stud cube K_Scale8_stone, and is MERGED into Kit (same-named pieces replaced).
 local IMPORTS = { { "ae_kit_r7", "K_Medal_pale", 40.0, false }, { "ae_kit_r8", "K_Scale8_stone", 10.0, true },
-	{ "ae_kit_r8b", "K_Scale8_stone", 10.0, true } } -- r8b: fixed skull only, if the lead imports it
+	{ "ae_kit_r8b", "K_Scale8_stone", 10.0, true }, -- r8b: fixed skull only, if the lead imports it
+	{ "ae_kit_r9", "K_Scale9_stone", 10.0, true } } -- r9: pass-9 pieces (islands, buildings, letters, spills, thin ring)
 for _, imp in ipairs(IMPORTS) do
 	local src = workspace:FindFirstChild(imp[1])
 	if src then -- first run after an import: move the imported model into ServerStorage.Kit at true size
@@ -25,7 +26,7 @@ for _, imp in ipairs(IMPORTS) do
 				d.CFrame = CFrame.new(d.Position / IMPORT_SCALE) * (d.CFrame - d.CFrame.Position)
 				d.Anchored = true
 				local old = kit:FindFirstChild(d.Name); if old then old:Destroy() end
-				if d.Name:sub(1, 9) == "K_Scale8_" then d:Destroy() else d.Parent = kit end
+				if d.Name:sub(1, 7) == "K_Scale" then d:Destroy() else d.Parent = kit end
 			end
 		end
 		src:Destroy()
@@ -54,6 +55,7 @@ local LOOK = {
 }
 local RUNNER_BLUE = rgb(40, 68, 140)
 local function lighten(c, k) return c:Lerp(Color3.new(1, 1, 1), k) end
+local HAS9 = kit:FindFirstChild("K_Isl91_rock") ~= nil -- pass-9 kit imported?
 local function look(p, tint, rim)
 	local grp, tok = p.Name:match("^K_([^_]+)_(%a+)")
 	if tok and tok:sub(1, 4) == "leaf" and tint then
@@ -121,11 +123,19 @@ for _, pre in ipairs({ "K_Hero", "K_Stairs", "K_Medal" }) do
 	local m = place(pre, CFrame.new())
 	for _, p in ipairs(m:GetChildren()) do pcall(function() p.CollisionFidelity = Enum.CollisionFidelity.PreciseConvexDecomposition end) end
 end
+-- pass 9 (round-6 item 4): arch cheeks, banners and parapets to slate (base darker than the (65,72,85) target: the sky
+-- ambient adds blue), vault interior near-black grey; the egg dome (Neon foam inside the glass sheet) is hidden
+do
+	local h = root:FindFirstChild("K_Hero")
+	h.K_Hero_stone.Color = rgb(56, 60, 68); h.K_Hero_vault.Color = rgb(36, 42, 48)
+	h.K_Hero_foam.Transparency = 1; h.K_Hero_sheet.Transparency = 1
+	h.K_Hero_foam.CanCollide = false; h.K_Hero_sheet.CanCollide = false
+end
 -- vault lights and fountain mist (round-3 item 1/8): a small cyan PointLight in each vault, mist at the sheet's foot
 for qx = -1, 1, 2 do for qz = -1, 1, 2 do
 	local function at(u, y, w) return Vector3.new(qx * (w + u) / R2, y, qz * (w - u) / R2) end
 	local a = part("VaultLight", Vector3.new(0.2, 0.2, 0.2), CFrame.new(at(0, 6.2, 37.5)), rgb(0, 0, 0)); a.Transparency = 1; a.CanCollide = false
-	local L = Instance.new("PointLight"); L.Color = rgb(120, 200, 230); L.Range = 16; L.Brightness = 3; L.Shadows = false; L.Parent = a
+	local L = Instance.new("PointLight"); L.Color = rgb(150, 200, 220); L.Range = 14; L.Brightness = 0.5 -- pass 9: 3 -> 0.5, it tinted the vault navy; L.Shadows = false; L.Parent = a
 	local m = part("Mist", Vector3.new(2.4, 0.2, 2.4), CFrame.new(at(0, 4.4, 30.6)), rgb(0, 0, 0)); m.Transparency = 1; m.CanCollide = false
 	local e = Instance.new("ParticleEmitter"); e.Color = ColorSequence.new(rgb(220, 245, 255)); e.LightEmission = 0.4
 	e.Size = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.6), NumberSequenceKeypoint.new(1, 1.8) })
@@ -144,7 +154,7 @@ part("GroundE", Vector3.new(800, 6, 96), CFrame.new(48 + 400, 3, 0), ZBASE, GR)
 part("GroundW", Vector3.new(800, 6, 96), CFrame.new(-48 - 400, 3, 0), ZBASE, GR)
 part("WaterEdge", Vector3.new(4000, 1, 4000), CFrame.new(0, -2.6, 0), rgb(70, 130, 160), GL).Transparency = 0.2
 local G = Instance.new("Folder"); G.Name = "Zoning"; G.Parent = root
-local GRAVEL, REDL, WATERC, SAND, WHITEF, GREEN2 = rgb(105, 72, 68), rgb(190, 45, 40), rgb(90, 170, 200), rgb(176, 160, 118), rgb(225, 228, 235), rgb(132, 165, 60)
+local GRAVEL, REDL, WATERC, SAND, WHITEF, GREEN2 = rgb(104, 107, 109), rgb(190, 45, 40), rgb(90, 170, 200), rgb(176, 160, 118), rgb(225, 228, 235), rgb(132, 165, 60)
 local function patch(kind, x, z, sc, col, layer, mat)
 	local m = place("K_Patch" .. kind, CFrame.new(x, 6.0 + 0.05 * layer, z) * rot(), sc, col, G)
 	if mat then for _, p in ipairs(m:GetChildren()) do p.Material = mat end end
@@ -361,7 +371,7 @@ for i = 1, 140 do
 	if math.abs(z) > x * 1.05 or (x < 130 and math.abs(z) < 60) then continue end -- east wedge, keep the Raid forecourt open
 	local c = REDS[i % 4 + 1]
 	if i % 3 == 0 then fluffy(i % 2 == 0 and "K_Fluffy" or "K_FluffyS", x, 6, z, rng:NextNumber(0.8, 1.3), c, P)
-	elseif i % 7 == 1 then place("K_DeadTree", CFrame.new(x, 6, z) * rot(), rng:NextNumber(0.8, 1.1), rgb(120, 30, 35), P)
+	elseif i % 7 == 1 then place("K_DeadTree", CFrame.new(x, 6, z) * rot(), rng:NextNumber(0.8, 1.1), rgb(40, 30, 35), P)
 	else place("K_ClumpB", CFrame.new(x, 6.05, z) * rot(), rng:NextNumber(2.4, 3.6), c:Lerp(rgb(20, 10, 10), 0.35), P, c) end
 	nE += 1
 	if i % 30 == 0 then task.wait() end
@@ -418,11 +428,11 @@ for k = 1, 6 do
 	part("Stall", Vector3.new(4, 2.6, 2.4), CFrame.new(s * 16.8, 7.3, -69 - 14 * k), rgb(150, 105, 65), SM, nil, LM)
 end
 for k = 1, 3 do
-	for s = -1, 1, 2 do place("K_Cypress", CFrame.new(s * 17.5, 6, -95 - 22 * k), 1.0, rgb(55, 100, 230), LM, rgb(110, 160, 255)) end
+	for s = -1, 1, 2 do place("K_Cypress", CFrame.new(s * 17.5, 6, -95 - 22 * k), 1.2, rgb(55, 100, 230), LM, rgb(110, 160, 255)) end
 end
 -- pass 8 (round-5 item 6): the gold-tree mass framing Summon in r1: 4 big gold broadleaf trees (25-30 tall) behind and
 -- beside the hall
-for _, t in ipairs({ { -34, HZ - 6, 1.9 }, { 36, HZ - 4, 1.8 }, { -16, HZ - 30, 2.1 }, { 20, HZ - 28, 2.0 } }) do
+for _, t in ipairs({ { -38, HZ - 6, 2.3 }, { 40, HZ - 4, 2.1 }, { -18, HZ - 30, 2.6 }, { 22, HZ - 28, 2.4 } }) do -- pass 9: 35-40 tall
 	fluffy("K_Fluffy", t[1], 6, t[2], t[3], rgb(220, 175, 50), LM)
 end
 -- S: Expeditions (pass 8, round-5 item 3): own ornate gate 1.5x (teal frame, gold trims, teal stained glass with gold
@@ -454,7 +464,7 @@ end
 -- red light and a red haze emitter.
 -- pass 8 (round-5 item 2): weathered and darker: walls (130,55,58) Slate, trim (92,40,48), towers/spires near-black red
 -- (60,25,30), the own pass-8 skull (deeper relief) in grey-red (125,85,72) Slate, 8 dead red trees and a denser haze.
-local WR, WR2, DK, TW = rgb(108, 46, 50), rgb(104, 44, 48), rgb(92, 40, 48), rgb(60, 25, 30) -- base darker than the (130,55,58) target: Slate in sun + red light renders ~+40
+local WR, WR2, DK, TW = rgb(150, 58, 64), rgb(150, 58, 64), rgb(90, 35, 45), rgb(90, 35, 45) -- pass 9: lit red (170,70,75) / trim (90,35,45) -- base darker than the (130,55,58) target: Slate in sun + red light renders ~+40
 local SL = Enum.Material.Slate
 local RX = 90
 local rg = place("K_Gothic", CFrame.new(RX, 6, 0) * CFrame.Angles(0, math.pi, 0), 1.0, nil, LM) -- kit arrives yawed 180
@@ -488,7 +498,7 @@ for s = -1, 1, 2 do
 	local w = place("K_Arcade7", CFrame.new(RX + 3, 6, s * 37) * CFrame.Angles(0, math.pi, 0), 1.0, nil, LM)
 	for _, p in ipairs(w:GetChildren()) do p.Color = p.Name:find("_darkStone") and rgb(30, 12, 15) or WR; p.Material = SL end
 	for k = 1, 4 do -- 8 dead red trees 10-15 tall round the base
-		place("K_DeadTree", CFrame.new(RX - 10 + rng:NextNumber(-4, 12), 6, s * (16 + 8 * k + rng:NextNumber(-2, 2))) * rot(), rng:NextNumber(0.75, 1.05), rgb(120, 30, 35), LM)
+		place("K_DeadTree", CFrame.new(RX - 10 + rng:NextNumber(-4, 12), 6, s * (16 + 8 * k + rng:NextNumber(-2, 2))) * rot(), rng:NextNumber(0.75, 1.05), rgb(40, 30, 35), LM)
 	end
 	palm("K_Palm6B", RX - 6, s * 46, 1.0, RED, 5, s > 0 and math.pi / 2 or -math.pi / 2, LM)
 end
@@ -586,7 +596,304 @@ for i, c in ipairs(clouds) do
 	place(i % 2 == 0 and "K_Cloud7" or "K_Cloud7B", CFrame.lookAt(pos, Vector3.new(0, c[2], 0)) * CFrame.Angles(0, rng:NextNumber(-0.4, 0.4), 0), c[4], nil, ISL)
 end
 
+local nS = 0
+do
+-- ================================================================ pass 9 (verify6_plaza.md, round 6 against the live reference)
+local P9 = Instance.new("Folder"); P9.Name = "Pass9"; P9.Parent = root
+local function face(pos, dir) -- kit pieces authored facing -Z arrive yawed 180: turn them to face `dir`
+	return CFrame.lookAt(pos, pos + Vector3.new(dir.X, 0, dir.Z)) * CFrame.Angles(0, math.pi, 0)
+end
+local function paint(m, map) -- recolour a placed model by name token: map[token] = { colour, material?, transparency? }
+	for _, p in ipairs(m:GetChildren()) do
+		local tok = p.Name:match("_(%a+)$")
+		local v = map[tok]
+		if v then p.Color = v[1]; if v[2] then p.Material = v[2] end; if v[3] then p.Transparency = v[3] end end
+	end
+	return m
+end
+local function kill(parent, name) for _, c in ipairs(parent:GetChildren()) do if c.Name == name then c:Destroy() end end end
+
+-- item 5: fountain core. Dark slatted drum (50,60,70) with a gold band over the old pale drum and rods, a water disc, a
+-- ledge from the back of the vault and a 4-wide water sheet (120,210,235) T 0.3 falling into the drum, spray.
+for qx = -1, 1, 2 do for qz = -1, 1, 2 do
+	local c = Vector3.new(qx * 20.85, 0, qz * 20.85); local d = Vector3.new(qx, 0, qz).Unit; local lat = Vector3.new(-qz, 0, qx).Unit
+	local up = CFrame.Angles(0, 0, math.pi / 2)
+	part("Drum", Vector3.new(2.7, 6.6, 6.6), CFrame.new(c + Vector3.new(0, 3.0, 0)) * up, rgb(50, 60, 70), SM, Enum.PartType.Cylinder, P9)
+	for k = 0, 15 do
+		local a = 2 * math.pi * k / 16; local o = Vector3.new(math.cos(a), 0, math.sin(a))
+		local q = c + o * 3.35 + Vector3.new(0, 2.9, 0)
+		part("DrumSlat", Vector3.new(0.45, 2.3, 0.3), CFrame.lookAt(q, q + o), rgb(78, 88, 100), SM, nil, P9)
+	end
+	part("DrumBand", Vector3.new(0.4, 7.2, 7.2), CFrame.new(c + Vector3.new(0, 4.05, 0)) * up, GOLD, SM, Enum.PartType.Cylinder, P9)
+	part("DrumBand2", Vector3.new(0.3, 7.0, 7.0), CFrame.new(c + Vector3.new(0, 1.75, 0)) * up, GOLD, SM, Enum.PartType.Cylinder, P9)
+	local w = part("DrumWater", Vector3.new(0.12, 6.0, 6.0), CFrame.new(c + Vector3.new(0, 4.38, 0)) * up, rgb(120, 210, 235), SM, Enum.PartType.Cylinder, P9); w.Transparency = 0.15
+	local lc = c + d * 5.6 + Vector3.new(0, 8.7, 0)
+	part("Ledge", Vector3.new(5.4, 0.7, 7), CFrame.lookAt(lc, lc + d), rgb(60, 66, 76), SM, nil, P9)
+	part("LedgeLip", Vector3.new(5.6, 0.25, 0.4), CFrame.lookAt(lc - d * 3.5 + Vector3.new(0, 0.3, 0), lc + d), GOLD, SM, nil, P9)
+	local sc = c + d * 2.2 + Vector3.new(0, 6.5, 0)
+	local sh = part("WaterSheet", Vector3.new(4, 4.3, 0.15), CFrame.lookAt(sc, sc + d), rgb(120, 210, 235), SM, nil, P9)
+	sh.Transparency = 0.3 -- SmoothPlastic: Glass at 0.3 vanished against the dark vault; sh.CanCollide = false; sh.CastShadow = false
+	local sp = part("Spray", Vector3.new(3, 0.2, 1), CFrame.lookAt(c + d * 2.2 + Vector3.new(0, 4.5, 0), c + d * 3), rgb(0, 0, 0), SM, nil, P9)
+	sp.Transparency = 1; sp.CanCollide = false
+	local e = Instance.new("ParticleEmitter"); e.Color = ColorSequence.new(rgb(225, 245, 255)); e.LightEmission = 0.5
+	e.Size = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.4), NumberSequenceKeypoint.new(1, 1.4) })
+	e.Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.4), NumberSequenceKeypoint.new(1, 1) })
+	e.Lifetime = NumberRange.new(0.5, 1.0); e.Rate = 30; e.Speed = NumberRange.new(2, 4); e.SpreadAngle = Vector2.new(50, 50)
+	e.Acceleration = Vector3.new(0, -6, 0); e.Parent = sp
+end end
+
+-- item 10 (cheap parts): 8 gold studs round the medallion, short white bollards, blue crystal pods beside each kiosk
+for k = 0, 7 do
+	local a = 2 * math.pi * k / 8 + math.pi / 8
+	blob("MedalStud", Vector3.new(1.3, 0.6, 1.3), Vector3.new(11 * math.cos(a), 0.45, 11 * math.sin(a)), rgb(180, 160, 60), Enum.Material.Metal, P9)
+end
+for _, b in ipairs(root:GetChildren()) do
+	if b.Name == "K_Bollard" then
+		for _, p in ipairs(b:GetChildren()) do if not p.Name:find("gold") then p.Color = rgb(235, 237, 230) end end
+	end
+end
+if kit:FindFirstChild("K_Pod8_glass") then
+	for qx = -1, 1, 2 do for qz = -1, 1, 2 do
+		for _, xz in ipairs({ { 22, 51 }, { 51, 22 } }) do
+			local pod = place("K_Pod8", CFrame.new(qx * xz[1], 6, qz * xz[2]) * CFrame.Angles(0, rng:NextNumber(0, 6), 0.12), 0.95, nil, P9)
+			paint(pod, { glass = { rgb(40, 110, 230), GL, 0.1 }, gold = { rgb(200, 172, 60) } })
+		end
+	end end
+end
+
+-- item 3: Raid as a glowing red set piece. The brick tower block becomes a gothic facade 44 wide x 30 tall carrying the
+-- skull 2.3x (about 25 wide) in (200,85,88) with neon eyes; the beam runs from the mouth down to own 3D "Raid" letters;
+-- a small skull keystone over the gate; three red PointLights (range 50, brightness 3) and a low red fog; a Boss Rush tower
+-- with a purple neon portal on the left.
+kill(LM, "RaidTower"); kill(LM, "RaidTowerCap"); kill(LM, "RaidBeam"); kill(LM, "RaidLight"); kill(LM, "SkullLight")
+for _, m in ipairs(LM:GetChildren()) do if m.Name == "K_Skull8" then m:Destroy() end end
+part("RaidFacade", Vector3.new(10, 30, 44), CFrame.new(RX + 10, 21, 0), rgb(150, 58, 64), SL, nil, P9)
+part("RaidFacadeCap", Vector3.new(11, 1.4, 45), CFrame.new(RX + 10, 36.6, 0), rgb(90, 35, 45), SL, nil, P9)
+for s = -1, 1, 2 do
+	for k = 1, 2 do part("RaidButtress", Vector3.new(2.4, 30, 2.4), CFrame.new(RX + 4.8, 21, s * (8 + 7 * k)), rgb(90, 35, 45), SL, nil, P9) end
+	part("RaidWin", Vector3.new(0.4, 9, 3.2), CFrame.new(RX + 4.8, 26, s * 11.5), rgb(255, 70, 60), NE, nil, P9).Transparency = 0.2
+end
+local SKC = Vector3.new(RX + 10, 60, 0) -- pedestal sunk into the facade: the skull reads as set into it
+local sk9 = place("K_Skull8", CFrame.new(SKC) * CFrame.Angles(0, math.pi, 0), 2.0, nil, P9)
+paint(sk9, { bone = { rgb(185, 75, 80), SM }, dark = { rgb(40, 8, 12) }, eye = { rgb(255, 40, 40), NE } })
+local beam = part("RaidBeam9", Vector3.new(1.0, 12, 2.4), CFrame.new(RX + 3.0, 45, 0), rgb(255, 45, 45), NE, nil, P9); beam.CastShadow = false
+local ks = place("K_Skull8", CFrame.new(RX - 1.6, 6 + 21.5, 0) * CFrame.Angles(0, math.pi, 0), 0.28, nil, P9)
+paint(ks, { bone = { rgb(225, 200, 195), SM }, dark = { rgb(30, 10, 12) }, eye = { rgb(255, 40, 40), NE } })
+if kit:FindFirstChild("K_TxtRaid9_letters") then
+	kill(LM, "RaidSign")
+	local t = place("K_TxtRaid9", face(Vector3.new(RX - 0.6, 39.5, 0), Vector3.new(-1, 0, 0)), 1.0, nil, P9) -- in front of the pedestal foot (RX+0.8)
+	paint(t, { letters = { rgb(255, 90, 90), NE } })
+end
+for k = -1, 1 do
+	local a = part("RaidLight9", Vector3.new(0.2, 0.2, 0.2), CFrame.new(RX - 8, 16, k * 16), rgb(0, 0, 0), SM, nil, P9); a.Transparency = 1; a.CanCollide = false
+	local L = Instance.new("PointLight"); L.Color = rgb(255, 60, 60); L.Range = 45; L.Brightness = 1.2; L.Shadows = false -- brief: 50/3; 3 burnt every face to pure (255,0,0); L.Parent = a
+end
+do
+	local hz9 = LM:FindFirstChild("RaidHaze")
+	if hz9 then
+		hz9.CFrame = CFrame.new(RX - 4, 7, 0); hz9.Size = Vector3.new(40, 1, 90)
+		local e = hz9:FindFirstChildOfClass("ParticleEmitter"); e.Color = ColorSequence.new(rgb(235, 60, 55)); e.LightEmission = 0.35
+		e.Rate = 14; e.Size = NumberSequence.new({ NumberSequenceKeypoint.new(0, 8), NumberSequenceKeypoint.new(1, 16) })
+		e.Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 1), NumberSequenceKeypoint.new(0.3, 0.65), NumberSequenceKeypoint.new(1, 1) })
+		e.Acceleration = Vector3.new(0, 0.2, 0)
+	end
+end
+-- Boss Rush tower (left of Raid from the spawn): dark gothic block 15x15x40, a spire, a purple neon portal and own letters
+do
+	local BX, BZ = RX + 6, -52
+	part("BossTower", Vector3.new(15, 34, 15), CFrame.new(BX, 6 + 17, BZ), rgb(55, 42, 55), SL, nil, P9)
+	part("BossCap", Vector3.new(16.5, 1.4, 16.5), CFrame.new(BX, 6 + 34.6, BZ), rgb(90, 35, 45), SL, nil, P9)
+	local sp = place("K_Spire", CFrame.new(BX, 6 + 35, BZ), 1.6, nil, P9)
+	for _, p in ipairs(sp:GetChildren()) do p.Color = rgb(60, 30, 45); p.Material = SL end
+	local po = part("BossPortal", Vector3.new(0.4, 11, 11), CFrame.new(BX - 7.6, 6 + 8, BZ), rgb(200, 80, 255), NE, Enum.PartType.Cylinder, P9); po.Transparency = 0.1
+	part("BossPortalRim", Vector3.new(0.6, 13, 13), CFrame.new(BX - 7.45, 6 + 8, BZ), rgb(45, 30, 50), SL, Enum.PartType.Cylinder, P9)
+	local pl9 = Instance.new("PointLight"); pl9.Color = rgb(200, 80, 255); pl9.Range = 24; pl9.Brightness = 2; pl9.Parent = po
+	if kit:FindFirstChild("K_TxtBoss9_letters") then
+		paint(place("K_TxtBoss9", face(Vector3.new(BX - 8.2, 6 + 22, BZ), Vector3.new(-1, 0, 0)), 1.0, nil, P9), { letters = { rgb(205, 110, 255), NE } })
+	end
+end
+
+-- item 6: Summon two-storey facade (own K_Summon9, 50 x 35) with own gold 3D "Summon" letters; corner towers moved out
+if kit:FindFirstChild("K_Summon9_cream") then
+	for _, n in ipairs({ "SummonBody", "SummonBand", "SummonBand2", "SummonSign", "K_Arcade7" }) do
+		for _, c in ipairs(LM:GetChildren()) do if c.Name == n and (n ~= "K_Arcade7" or math.abs(c:GetPivot().Position.Z - HZ) < 10 and math.abs(c:GetPivot().Position.X) < 10) then c:Destroy() end end
+	end
+	for _, c in ipairs(LM:GetChildren()) do
+		if c.Name == "SummonDome" then c.Position = Vector3.new(0, 44, HZ - 12) elseif c.Name == "SummonFinial" then c.Position = Vector3.new(0, 55, HZ - 12) end
+		if c.Name == "K_RTower7" and math.abs(c:GetPivot().Position.Z - HZ) < 3 then c:PivotTo(c:GetPivot() + Vector3.new(c:GetPivot().Position.X > 0 and 6 or -6, 0, 0)) end
+	end
+	paint(place("K_Summon9", face(Vector3.new(0, 6, HZ), Vector3.new(0, 0, 1)), 1.0, nil, P9),
+		{ cream = { rgb(225, 210, 170) }, gold = { rgb(200, 170, 60) }, dark = { rgb(70, 60, 55) }, blue = { rgb(50, 90, 180) } })
+	paint(place("K_TxtSummon9", face(Vector3.new(0, 6 + 20.5, HZ + 2.4), Vector3.new(0, 0, 1)), 1.0, nil, P9), { letters = { rgb(235, 195, 70), SM } })
+end
+
+-- item 8: thin Story ring (own K_Ring9, 2.4 deep) in silver-blue with gems and a crest, black void, own blue letters
+if kit:FindFirstChild("K_Ring9_silver") then
+	for _, n in ipairs({ "K_Ring", "StoryVoid", "StorySign", "K_Crown7" }) do kill(LM, n) end
+	paint(place("K_Ring9", face(Vector3.new(SX, 6, 0), Vector3.new(1, 0, 0)), 1.0, nil, P9),
+		{ silver = { rgb(130, 160, 210) }, gold = { rgb(200, 172, 60) }, gem = { rgb(40, 110, 230), GL, 0.05 }, void = { rgb(2, 4, 10) } })
+	local g = LM:FindFirstChild("StoryGlow"); if g then g.Size = Vector3.new(0.3, 14.6, 14.6); g.Position = Vector3.new(SX + 0.4, 16, 0); g.Color = rgb(40, 90, 200); g.Transparency = 0.96 end
+	paint(place("K_TxtStory9", face(Vector3.new(SX + 0.6, 6 + 28.5, 0), Vector3.new(1, 0, 0)), 1.0, nil, P9), { letters = { rgb(90, 150, 255), SM } })
+	for _, m in ipairs(LM:GetChildren()) do if m.Name == "K_BigTree8" then for _, p in ipairs(m:GetChildren()) do if p.Name:find("_wood") then p.Color = rgb(150, 115, 80) end end end end
+end
+
+-- item 9 (partial): own teal 3D "Expeditions" letters, grey-stone shards, ring lowered 5 toward the sign
+if kit:FindFirstChild("K_TxtExp9_letters") then
+	kill(LM, "ExpSign")
+	paint(place("K_TxtExp9", face(Vector3.new(0, 6 + 27.8, EZ - 2.6), Vector3.new(0, 0, -1)), 1.0, nil, P9), { letters = { rgb(100, 230, 200), SM } })
+end
+for _, m in ipairs(LM:GetChildren()) do
+	if m.Name == "K_ExpRing8" then
+		m:PivotTo(m:GetPivot() - Vector3.new(0, 5, 0))
+		for _, p in ipairs(m:GetChildren()) do if p.Name:find("_stone") then p.Color = rgb(110, 125, 145) end end
+	end
+end
+task.wait()
+
+-- item 2: mid-distance architecture 90-130 out in the gaps between the landmarks
+if HAS9 then
+	local toC = function(x, z) return Vector3.new(-x, 0, -z) end
+	local gp = Vector3.new(-104, 6, -104)
+	paint(place("K_Guild9", face(gp, Vector3.new(0, 6, -20) - gp), 1.0, nil, P9),
+		{ cream = { rgb(225, 215, 185) }, gold = { rgb(200, 170, 60) }, dark = { rgb(60, 62, 75) }, blue = { rgb(40, 80, 170) } })
+	local tp = gp + ((Vector3.new(0, 6, -20) - gp) * Vector3.new(1, 0, 1)).Unit * 1.5 + Vector3.new(0, 37, 0)
+	paint(place("K_TxtGuild9", face(tp, Vector3.new(0, 6, -20) - gp), 1.0, nil, P9), { letters = { rgb(70, 200, 90), SM } })
+	for _, xz in ipairs({ { 112, 112 }, { -112, 112 } }) do
+		paint(place("K_Palace9", face(Vector3.new(xz[1], 6, xz[2]), toC(xz[1], xz[2])), 1.0, nil, P9),
+			{ cream = { rgb(225, 215, 190) }, gold = { rgb(200, 170, 60) }, dark = { rgb(60, 62, 75) }, blue = { rgb(40, 80, 170) } })
+	end
+	for _, xz in ipairs({ { -62, -140 }, { 88, -128 }, { -140, 62 } }) do
+		paint(place("K_Tower9", face(Vector3.new(xz[1], 6, xz[2]), toC(xz[1], xz[2])), 1.0, nil, P9),
+			{ stone = { rgb(150, 155, 160) }, dark = { rgb(55, 60, 70) }, roof = { rgb(80, 95, 125) } })
+	end
+end
+task.wait()
+
+-- item 1: big, close, lush islands (own K_Isl91/92: 110-140 long slabs, thick drooping grass cap, dense vines) 110-170 out,
+-- undersides 55-80 up; per island a 10x10x50 ruin tower, a rotunda or a domed tower, an aqueduct on every other one, 4-6
+-- green trees and 2 wide falls (own K_Fall9) found by a raycast onto the rock from the plaza side; 3 cumulus banks behind.
+if HAS9 then
+	for _, m in ipairs(ISL:GetChildren()) do if not m.Name:find("Cloud") then m:Destroy() end end
+	local I9 = { { 91, -55, -150, 92, 0.95 }, { 92, 65, -172, 104, 0.9 }, { 92, 0, -250, 135, 1.1 }, { 91, 130, -122, 96, 0.95 },
+		{ 92, 172, 30, 110, 0.9 }, { 91, 118, 132, 92, 0.85 }, { 92, -25, 168, 100, 0.95 }, { 91, -138, 112, 95, 0.9 },
+		{ 92, -168, -35, 110, 0.95 }, { 91, -128, -126, 100, 0.9 } }
+	local KR9 = { [91] = 50, [92] = 56 }
+	local nF9 = 0
+	for i, s in ipairs(I9) do
+		local pos = Vector3.new(s[2], s[4], s[3]); local sc = s[5]
+		local cf = CFrame.lookAt(pos, Vector3.new(0, s[4], 0)) * CFrame.Angles(0, rng:NextNumber(-0.25, 0.25), 0)
+		local m = place("K_Isl" .. s[1], cf, sc, nil, ISL)
+		local rock
+		for _, p in ipairs(m:GetChildren()) do
+			if p.Name:find("_rock") then rock = p; p.Color = rgb(222, 225, 218); p.Material = Enum.Material.Slate -- (160,162,155) rendered near-black, (196,198,190) lavender: the undersides see only the purple Ambient
+			elseif p.Name:find("_grass") then p.Color = rgb(110, 170, 70); p.Material = GR
+			elseif p.Name:find("_vine") then p.Color = rgb(70, 140, 60); p.Material = SM; p.CastShadow = false end
+		end
+		local R = KR9[s[1]] * sc; local top = 3.0 * sc
+		local function on(lx, lz) return cf * CFrame.new(lx * R, top - 0.6, lz * R * 0.5) end
+		local t = place("K_Ruin8", on(-0.55, 0.1) * CFrame.Angles(0, rng:NextNumber(0, 1.5), 0), 1.25, nil, ISL)
+		for _, p in ipairs(t:GetChildren()) do p.Color = rgb(175, 180, 175) end
+		if i % 2 == 0 then
+			local r = place("K_Rot9", on(0.45, 0.15), 1.0, nil, ISL); for _, p in ipairs(r:GetChildren()) do p.Color = rgb(180, 185, 180) end
+		else
+			local d = place("K_Dome8", on(0.5, 0.1), 1.05, nil, ISL)
+			for _, p in ipairs(d:GetChildren()) do p.Color = p.Name:find("_dark") and rgb(70, 76, 88) or rgb(180, 185, 180) end
+		end
+		if i % 2 == 1 then
+			local a = place("K_Aque9", on(0.05, 0.35) * CFrame.Angles(0, rng:NextNumber(-0.3, 0.3), 0), 1.0, nil, ISL)
+			for _, p in ipairs(a:GetChildren()) do p.Color = rgb(175, 180, 175) end
+		end
+		for k = 1, 5 do
+			local q = on(rng:NextNumber(-0.75, 0.75), rng:NextNumber(-0.6, 0.7)).Position
+			fluffy(k % 2 == 0 and "K_FluffyS" or "K_Fluffy", q.X, q.Y, q.Z, rng:NextNumber(1.0, 1.3), ({ rgb(90, 160, 60), rgb(100, 170, 65), rgb(80, 150, 55) })[k % 3 + 1], ISL)
+		end
+		local rp = RaycastParams.new(); rp.FilterType = Enum.RaycastFilterType.Include; rp.FilterDescendantsInstances = { rock }
+		for k = 1, 2 do
+			local lx = (k == 1 and -0.3 or 0.3) * R + rng:NextNumber(-5, 5)
+			local o = (cf * CFrame.new(lx, -3 * sc, -3 * R)).Position
+			local tgt = (cf * CFrame.new(lx, -3 * sc, 0)).Position
+			local hit = rock and workspace:Raycast(o, tgt - o, rp)
+			local hp = hit and hit.Position or (cf * CFrame.new(lx, -3 * sc, -0.5 * R)).Position
+			local l = cf:PointToObjectSpace(hp)
+			local f = place("K_Fall9", cf * CFrame.new(l.X, 1.0 * sc, l.Z - 1.5) * CFrame.Angles(0, math.pi, 0), sc * rng:NextNumber(0.9, 1.1), nil, ISL)
+			for _, p in ipairs(f:GetChildren()) do
+				p.CastShadow = false; p.CanCollide = false
+				if p.Name:find("_fall") then p.Color = rgb(190, 225, 245); p.Material = SM; p.Transparency = 0.4 -- Glass 0.2 rendered as opaque white pillars
+				else p.Color = rgb(235, 245, 252); p.Material = SM; p.Transparency = 0.55 end
+			end
+			nF9 += 1
+		end
+		task.wait()
+	end
+	for _, c in ipairs({ { -170, 55, -330, 4.2 }, { 240, 65, -260, 4.5 }, { -280, 75, 230, 4.2 } }) do
+		local pos = Vector3.new(c[1], c[2], c[3])
+		local m = place("K_Cloud7", CFrame.lookAt(pos, Vector3.new(0, c[2], 0)), c[4], nil, ISL)
+		for _, p in ipairs(m:GetChildren()) do p.Color = rgb(245, 245, 240) end
+	end
+end
+task.wait()
+
+-- item 7: far field. W blue lagoon with a sand beach, S white courtyard with arcades. (E gravel is recoloured above.)
+part("LagoonBeach", Vector3.new(0.3, 150, 150), CFrame.new(-230, 6.02, 0) * CFrame.Angles(0, 0, math.pi / 2), rgb(225, 205, 150), Enum.Material.Sand, Enum.PartType.Cylinder, P9)
+part("Lagoon", Vector3.new(0.3, 126, 126), CFrame.new(-236, 6.1, 0) * CFrame.Angles(0, 0, math.pi / 2), rgb(60, 170, 220), SM, Enum.PartType.Cylinder, P9)
+part("Courtyard", Vector3.new(90, 0.3, 64), CFrame.new(0, 6.03, 142), rgb(230, 232, 236), SM, nil, P9)
+for _, w in ipairs({ { 0, 176, 0 }, { -47, 142, math.pi / 2 }, { 47, 142, -math.pi / 2 } }) do
+	for k = -1, 1 do
+		local off = (w[3] == 0) and Vector3.new(k * 28, 0, 0) or Vector3.new(0, 0, k * 22)
+		local a = place("K_Arcade7", CFrame.new(Vector3.new(w[1], 6, w[2]) + off) * CFrame.Angles(0, w[3] + math.pi / 2, 0), 1.3, nil, P9)
+		for _, p in ipairs(a:GetChildren()) do p.Color = p.Name:find("_darkStone") and rgb(150, 155, 165) or rgb(235, 236, 238) end
+	end
+end
+task.wait()
+
+-- item 7 + lead's correction: lawns and coloured beds are TERRAIN (Grass with Decoration blades), not mesh clumps. The
+-- mesh clumps on the stairs and floor become own flat leaf spills (K_Spill9, 0.3 high); the far-field red bush mounds go.
+local T = workspace.Terrain
+T:Clear()
+local decoOK = pcall(function() T.Decoration = true end) -- not scriptable from the MCP context: tick Terrain > Decoration by hand if false
+T:SetMaterialColor(Enum.Material.Grass, rgb(110, 170, 70))
+local MS = game:GetService("MaterialService")
+local function variant(name, base, col)
+	local v = MS:FindFirstChild(name) or Instance.new("MaterialVariant"); v.Name = name; v.BaseMaterial = base; v.Parent = MS
+	pcall(function() MS:SetBaseMaterialOverride(base, name) end)
+	T:SetMaterialColor(base, col)
+	return v
+end
+variant("AE_RedBed", Enum.Material.Glacier, rgb(200, 60, 55))
+local function lawn(cf, size, mat) T:FillBlock(cf, size, mat or Enum.Material.Grass) end
+-- terrain top must sit just above the terrace parts (y 6): fill a 4-stud slab centred at 4.6 (top about 6.6 after smoothing)
+for _, i in ipairs({ 2, 3 }) do
+	local a = math.rad(90 * i); local dir = Vector3.new(math.sin(a), 0, -math.cos(a)); local side = Vector3.new(math.cos(a), 0, math.sin(a))
+	for s = -1, 1, 2 do
+		local c = dir * 56 + side * (s * 13)
+		lawn(CFrame.lookAt(Vector3.new(c.X, 4.6, c.Z), Vector3.new(c.X, 4.6, c.Z) + dir), Vector3.new(9, 4, 17))
+	end
+end
+for s = -1, 1, 2 do lawn(CFrame.new(s * 9.6, 4.6, 50.6), Vector3.new(13, 4, 6)) end
+for k = 0, 5 do for s = -1, 1, 2 do lawn(CFrame.new(s * 21.5, 4.6, -60 - 20 * k), Vector3.new(6, 4, 16)) end end -- N avenue verges
+for ci, q in ipairs(corner) do lawn(CFrame.new(q[1] * 80, 4.6, q[2] * 70), Vector3.new(36, 4, 30)) end -- planting beds behind the pools
+lawn(CFrame.new(-120, 4.6, 0), Vector3.new(44, 4, 70)) -- Story lawn round the tree
+for s = -1, 1, 2 do lawn(CFrame.new(112, 4.6, s * 34), Vector3.new(30, 4, 22), Enum.Material.Glacier) end -- red beds (own variant) flanking the Raid forecourt
+for _, c in ipairs(P:GetChildren()) do if c.Name == "Lawn" or c.Name == "LawnTop" then c:Destroy() end end
+if kit:FindFirstChild("K_Spill9_leaf") then
+	local SPC = { [rgb(40, 90, 230):ToHex()] = rgb(60, 130, 230), [rgb(190, 45, 40):ToHex()] = rgb(220, 70, 70), [rgb(150, 178, 75):ToHex()] = rgb(120, 190, 60) }
+	for _, m in ipairs(P:GetChildren()) do
+		if m.Name == "K_ClumpB" or m.Name == "K_ClumpG" then
+			local piv = m:GetPivot(); local rimc
+			for _, p in ipairs(m:GetChildren()) do if p.Name:find("leafRim") then rimc = p.Color end end
+			local big = m:GetExtentsSize().X > 8
+			if big then m:Destroy() -- far-field red mounds: replaced by the terrain bed and the trees
+			else
+				local col = (rimc and SPC[rimc:ToHex()]) or rimc or rgb(120, 190, 60)
+				local sp = place("K_Spill9", CFrame.new(piv.Position.X, piv.Position.Y + 0.02, piv.Position.Z) * rot(), rng:NextNumber(0.9, 1.4), col:Lerp(rgb(20, 25, 20), 0.2), P, lighten(col, 0.2))
+				m:Destroy(); nS += 1
+			end
+		end
+	end
+end
+end
+
 local n = 0; for _, d in ipairs(root:GetDescendants()) do if d:IsA("BasePart") then n += 1 end end
 local sp = workspace:FindFirstChild("SpawnLocation"); if sp then sp.CFrame = CFrame.new(0, 0.6, 30); sp.Transparency = 1; sp.CanCollide = false; local dc = sp:FindFirstChildOfClass("Decal"); if dc then dc:Destroy() end end
 local bp = workspace:FindFirstChild("Baseplate"); if bp then bp:Destroy() end
-return "plaza parts " .. n .. ", falls " .. nFall .. ", east " .. nE .. ", dressing " .. nf .. ", patches " .. nPatch .. ", import scale " .. IMPORT_SCALE
+return "plaza parts " .. n .. ", falls " .. nFall .. ", east " .. nE .. ", dressing " .. nf .. ", patches " .. nPatch .. ", spills " .. nS .. ", import scale " .. IMPORT_SCALE
