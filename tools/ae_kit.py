@@ -1570,3 +1570,234 @@ def export_r7(path):
     bpy.ops.export_scene.fbx(filepath=path, use_selection=True, object_types={'MESH'}, apply_unit_scale=True,
                              mesh_smooth_type='FACE', use_mesh_modifiers=True, axis_forward='-Z', axis_up='Y')
     return [o.name for o in sel]
+
+# ---------------------------------------------------------------- pass 8: waterfall curtains, big ruins, weathered skull,
+# Expeditions crescent ring + ornate gate, thick Story tree. Freestyle from the picture set and the round-5 review
+# (verify5_plaza.md). Only these pieces (plus a scale marker) go into ae_kit_r8.fbx; the r7 kit stays in Studio.
+def build_scale8():
+    """10 x 10 x 10 cube: the Studio side measures the import scale from it, then drops it."""
+    clear_piece("K_Scale8_")
+    o = rbox("K_Scale8_stone", 10.0, 10.0, 10.0, 0.01, 1); return o
+
+def build_fall8(L=80.0, w0=4.5, w1=6.5, rows=14, cols=5):
+    """Waterfall curtain: a bowed sheet 4.5 wide at the lip widening to 6.5 at the foot, L long (top at y 0), double
+    sided, with a rounded foam lip at the top and a mist cluster (squashed spheres) at the foot. Faces -Z."""
+    random.seed(81); clear_piece("K_Fall8_"); clear_piece("Q_")
+    bm = bmesh.new(); F = []; B = []
+    for r in range(rows + 1):
+        t = r / rows; y = -L * t; w = w0 + (w1 - w0) * t
+        rowF, rowB = [], []
+        for c in range(cols + 1):
+            u = c / cols - 0.5; x = u * w + 0.25 * math.sin(3 * t + c)
+            z = -1.2 * math.cos(math.pi * u) - 1.5 * t * t  # bowed outward, drifting out as it falls
+            rowF.append(bm.verts.new((x, y, z))); rowB.append(bm.verts.new((x, y, z + 0.18)))
+        F.append(rowF); B.append(rowB)
+    for r in range(rows):
+        for c in range(cols):
+            bm.faces.new((F[r][c], F[r][c + 1], F[r + 1][c + 1], F[r + 1][c]))
+            bm.faces.new((B[r][c], B[r + 1][c], B[r + 1][c + 1], B[r][c + 1]))
+    bm_obj("K_Fall8_fall", bm, smooth=True)
+    foam = bmesh.new()
+    for i in range(7):  # mist at the foot
+        a = 2 * math.pi * i / 7; rr = random.uniform(3.0, 5.0)
+        ico(foam, (2.5 * math.cos(a), -L - random.uniform(-1, 2), -2.5 + 2.5 * math.sin(a)), rr, 1, (1, 0.6, 1))
+    ico(foam, (0, -L + 1.5, -2.5), 5.5, 1, (1.2, 0.7, 1))
+    for i in range(3):  # foam lip where the water leaves the rim
+        ico(foam, ((i - 1) * 1.7, 0.2, -1.4), 1.3, 1, (1.2, 0.6, 1))
+    bm_obj("K_Fall8_foam", foam, smooth=True)
+
+def build_ruin8():
+    """Skyline ruins for the islands: an 8 x 8 x 40 arched square tower (4 levels, broken top) and a round domed tower
+    (drum r 5 x 26 with 2 rows of 8 dark arched windows, cornice, dome, needle), so the islands carry towers AND domes."""
+    clear_piece("K_Ruin8_"); clear_piece("K_Dome8_"); clear_piece("Q_")
+    merge_objs("K_Ruin8_white", ruin_tower("r8", 0, 0, 0, 40.0, 8.0, 7))
+    st = [lathe_at("Q_drum", [(0, 0), (5.6, 0), (5.6, 1.4), (5.0, 2.0), (5.0, 24.0), (5.8, 24.6), (5.8, 26.0), (0, 26.0)], (0, 0, 0), 24, False),
+          lathe_at("Q_dome", [(0, 26.0), (5.2, 26.0), (5.0, 28.5), (4.0, 31.5), (2.2, 33.6), (0, 34.4)], (0, 0, 0), 24),
+          lathe_at("Q_ndl", [(0, 34.0), (0.6, 34.0), (0.15, 39.0), (0, 39.2)], (0, 0, 0), 8, False)]
+    dk = []
+    for row, (yc, h) in enumerate(((8.0, 6.0), (17.5, 5.0))):
+        for i in range(8):
+            a = 2 * math.pi * (i + 0.5 * row) / 8
+            dk.append(rbox_rot(f"Q_w{row}{i}", 0.8, h, 1.8, (4.85 * math.cos(a), yc, 4.85 * math.sin(a)), -a, 0.7, 2))
+    merge_objs("K_Dome8_white", st); merge_objs("K_Dome8_darkStone", dk)
+
+def build_skull8():
+    """Weathered carved skull, about 11 wide x 14 tall with jaw, facing -X. Pass-7 sphere skull with 2-3 studs (at the
+    1.5x placement) of real relief: a heavy brow ridge with a central notch, deeper sockets, cheekbones that stand out,
+    temple hollows, a nose cavity, a chin-forward jaw with bigger teeth. Socket/nose faces split into a dark mesh; a
+    stepped carved pedestal; two glowing eye cores."""
+    clear_piece("K_Skull8_"); clear_piece("Q_")
+    bm = bmesh.new(); bmesh.ops.create_uvsphere(bm, u_segments=48, v_segments=32, radius=1.0)
+    eyes = [(0.4, -2.0), (0.4, 2.0)]; W = {}
+    g = lambda a, b: math.exp(-(a * a + b * b))
+    bm.verts.index_update()
+    for v in bm.verts:
+        x, y, z = v.co.x * 5.2, v.co.y * 6.0, v.co.z * 5.0
+        if y < -1.0:
+            t = min(1.0, (-y - 1.0) / 5.0); z *= 1 - 0.30 * t; x = x * (1 - 0.15 * t)
+        if x < 0: x *= 0.86
+        w = 0.0
+        front = max(0.0, min(1.0, (-x - 0.5) / 2.0))  # 0 at the sides, 1 on the face
+        if front > 0:
+            for ey, ez in eyes:
+                w = max(w, g((y - ey) / 1.6, (z - ez) / 1.4))
+            x += 3.6 * w * front
+            dn = g((y + 2.0) / 0.8, z / 0.6); x += 1.9 * dn * front; w = max(w, dn)
+            x -= 1.7 * front * g((y - 2.2) / 0.75, 0) * (1 - w) * (1 if abs(z) < 4.2 else 0.3)  # brow ridge
+            x += 0.7 * front * g(z / 0.55, (y - 2.6) / 1.0)                                       # brow notch
+            for s in (-1, 1):
+                ck = g((y + 1.0) / 0.8, (abs(z) - 3.2) / 1.0) if z * s > 0 else 0.0
+                x -= 1.4 * ck * front; z += s * 0.5 * ck                                          # cheekbones
+            x += 0.6 * front * g((y + 2.9) / 0.6, (abs(z) - 2.2) / 0.9)                           # under-cheek hollow
+        if abs(z) > 3.0 and -0.5 < y < 3.5 and x < 1.5:
+            z *= 1 - 0.07 * g((y - 1.2) / 1.2, (x + 1.0) / 1.5)                                  # temple hollow
+        y += 0.25 * math.sin(3.1 * z + 1.3 * x) * max(0.0, y / 6.0)                               # weathered crown
+        v.co = Vector((x, y, z)); W[v.index] = w
+    dark = bmesh.new(); dfaces = [f for f in bm.faces if sum(W[v.index] for v in f.verts) / len(f.verts) > 0.3]
+    for f in dfaces:
+        dark.faces.new([dark.verts.new(v.co) for v in f.verts])
+    bmesh.ops.delete(bm, geom=dfaces, context='FACES')
+    bone = [bm_obj("Q_head", bm, smooth=True)]
+    bone.append(rbox("Q_jaw", 6.4, 2.8, 7.4, 0.9, 2, (0.6, -6.1, 0)))
+    bone.append(rbox("Q_chin", 2.2, 2.0, 3.6, 0.6, 2, (-2.4, -6.9, 0)))
+    for i in range(8):
+        z = -2.6 + 0.74 * i
+        bone.append(rbox(f"Q_tu{i}", 0.9, 1.3, 0.62, 0.18, 1, (-2.9, -4.9, z)))
+        bone.append(rbox(f"Q_tl{i}", 0.9, 1.0, 0.62, 0.18, 1, (-2.7, -5.9, z)))
+    bone.append(prism("Q_ped", [(-3.4, -7.6, -4.6), (-3.4, -7.6, 4.6), (-4.6, -20.0, 5.8), (-4.6, -20.0, -5.8)], (8.6, 0, 0)))
+    for k, (y, d) in enumerate(((-9.0, 0.7), (-13.5, 1.0), (-18.6, 1.3))):  # carved cornices on the pedestal
+        bone.append(rbox(f"Q_cor{k}", 9.0 + d * 2, 1.0, 10.0 + d * 2 + (y + 20) * -0.2, 0.25, 1, (0.6, y, 0)))
+    dk = []  # r8b: the pass-8 crack strips floated in front of the receding crown (read as black antennae): dropped
+    eye = []
+    for k, (ey, ez) in enumerate(eyes):
+        eye.append(lathe_at(f"Q_eye{k}", [(0.9 * math.sin(t), -0.9 * math.cos(t)) for t in [math.pi * j / 6 for j in range(7)]], (-1.6, ey, ez), 10))
+    o = merge_objs("K_Skull8_bone", bone)
+    d = bm_obj("Q_dk", dark); merge_objs("K_Skull8_dark", [d] + dk); merge_objs("K_Skull8_eye", eye)
+    return o
+
+def build_expring8(R=12.0, n=8, span=0.52, depth=1.5):
+    """Expeditions halo: n curved crescent shards on a ring of radius R in the XY plane (about 6 long x 1.5 thick each),
+    each a crescent whose outer edge bulges and swirls ahead (a pinwheel), plus a 5 x 8 oval core. Faces -Z."""
+    clear_piece("K_ExpRing8_"); clear_piece("Q_")
+    bm = bmesh.new(); m = 14
+    for k in range(n):
+        a0 = 2 * math.pi * k / n; I, O = [], []
+        for s in range(m + 1):
+            t = s / m; pr = max(0.06, math.sin(math.pi * t)); th = a0 - span / 2 + span * t
+            ri, ro = R - 0.35 * pr, R + 1.45 * pr; tho = th + 0.10 * pr
+            I.append((ri * math.cos(th), ri * math.sin(th))); O.append((ro * math.cos(tho), ro * math.sin(tho)))
+        zf, zb = -depth / 2, depth / 2
+        If = [bm.verts.new((x, y, zf)) for x, y in I]; Ib = [bm.verts.new((x, y, zb)) for x, y in I]
+        Of = [bm.verts.new((x, y, zf)) for x, y in O]; Ob = [bm.verts.new((x, y, zb)) for x, y in O]
+        for s in range(m):
+            bm.faces.new((If[s], Of[s], Of[s + 1], If[s + 1])); bm.faces.new((Ib[s], Ib[s + 1], Ob[s + 1], Ob[s]))
+            bm.faces.new((Of[s], Ob[s], Ob[s + 1], Of[s + 1])); bm.faces.new((If[s], If[s + 1], Ib[s + 1], Ib[s]))
+        for s in (0, m): bm.faces.new((If[s], Ib[s], Ob[s], Of[s]))
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+    bm_obj("K_ExpRing8_stone", bm)
+    c = bmesh.new(); bmesh.ops.create_uvsphere(c, u_segments=24, v_segments=16, radius=1.0)
+    for v in c.verts: v.co = Vector((v.co.x * 2.5, v.co.y * 4.0, v.co.z * 0.6))
+    bm_obj("K_ExpRing8_core", c, smooth=True)
+
+def build_expgate8():
+    """Ornate Expeditions gate, 1.5x the pass-6 arch: teal round-arch frame (opening 18 wide, top 25.5) with gold outer
+    and inner trims, a teal stained-glass field split by gold mullions, a transom and a rose ring; two pale columns
+    with gold capitals and small teal domes; a gold crest. Faces -Z: x lateral, z depth."""
+    clear_piece("K_ExpGate8_"); clear_piece("Q_")
+    teal = [_band_xy("Q_fr", arch_outline(12.0, 13.5, 12.0), arch_outline(9.6, 13.5, 9.6), -1.8, 1.8, 'z')]
+    gold = [_band_xy("Q_go", arch_outline(12.7, 13.5, 12.7), arch_outline(12.0, 13.5, 12.0), -2.1, 2.1, 'z'),
+            _band_xy("Q_gi", arch_outline(9.6, 13.5, 9.6), arch_outline(9.0, 13.5, 9.0), -1.3, 1.3, 'z')]
+    glass = [extrude_outline("Q_field", arch_outline(9.0, 13.5, 9.0), 0.3, 0.0)]
+    for x in (-4.5, 0.0, 4.5):
+        top = 13.5 + math.sqrt(max(0.0, 9.0 ** 2 - x * x))
+        gold.append(rbox(f"Q_mul{x}", 0.45, top, 0.7, 0.1, 1, (x, top / 2, 0)))
+    gold.append(rbox("Q_tran", 18.0, 0.45, 0.7, 0.1, 1, (0, 13.5, 0)))
+    gold.append(tube_along("Q_rose", [(3.4 * math.cos(2 * math.pi * i / 24), 17.2 + 3.4 * math.sin(2 * math.pi * i / 24), -0.35) for i in range(24)], 0.28, True))
+    pale = []
+    for s in (-1, 1):
+        pale.append(lathe_at(f"Q_col{s}", [(0, 0), (2.2, 0), (2.2, 1.4), (1.6, 2.0), (1.45, 19.0), (0, 19.0)], (s * 15.2, 0, 0), 16))
+        gold.append(lathe_at(f"Q_cap{s}", [(0, 19.0), (1.7, 19.0), (2.3, 20.0), (2.3, 20.8), (0, 20.8)], (s * 15.2, 0, 0), 16, False))
+        gold.append(lathe_at(f"Q_ring{s}", [(1.5, 6.0), (1.75, 6.2), (1.75, 6.8), (1.5, 7.0)], (s * 15.2, 0, 0), 16, False))
+        teal.append(lathe_at(f"Q_dome{s}", [(0, 20.8), (1.9, 20.8), (1.8, 22.2), (1.1, 23.6), (0, 24.2)], (s * 15.2, 0, 0), 16))
+        gold.append(lathe_at(f"Q_fin{s}", [(0, 24.0), (0.35, 24.0), (0.08, 26.5), (0, 26.6)], (s * 15.2, 0, 0), 8, False))
+        pale.append(rbox(f"Q_ped{s}", 5.0, 1.2, 5.0, 0.3, 1, (s * 15.2, 0.6, 0)))
+    gold.append(lathe_at("Q_crest", [(0, 24.8), (1.6, 24.8), (0.9, 26.5), (1.3, 27.5), (0.2, 30.0), (0, 30.2)], (0, 0, 0), 10, False))
+    merge_objs("K_ExpGate8_teal", teal); merge_objs("K_ExpGate8_gold", gold)
+    merge_objs("K_ExpGate8_glass", glass); merge_objs("K_ExpGate8_pale", pale)
+
+def build_bigtree8(seed=92, H=50.0, R=40.0, cl=7.0):
+    """Story tree, pass 8: the trunk 1.6x thicker (r 10.5 at the base, 22-radius root flare) splitting LOW (from about
+    16 up) into 7 thick twisting branches (r 4.2 then 2.8) that fan out under the canopy, so the wood shows between the
+    sign and the leaves; a canopy of leaf-card puffs about 80 across with interior puffs so it does not go hollow."""
+    random.seed(seed); clear_piece("K_BigTree8_"); clear_piece("Q_")
+    A, Bm = bmesh.new(), bmesh.new(); wood = []
+    tp = lambda t: Vector((2.5 * math.sin(2.0 * t), H * 0.5 * t, 1.6 * math.sin(1.4 * t + 0.5) - 0.8))
+    for k, (t0, t1, r) in enumerate(((0.0, 0.45, 10.5), (0.4, 0.75, 8.2), (0.7, 1.0, 6.4))):
+        pts = [tp(t0 + (t1 - t0) * i / 6) for i in range(7)]
+        if k == 0: pts[0] = pts[0] + Vector((0, -0.5, 0))
+        wood.append(tube_along(f"Q_tr{k}", [tuple(p) for p in pts], r, res=10))
+    wood.append(lathe_at("Q_flare", [(0, 0), (22.0, 0), (15.0, 2.0), (11.5, 6.0), (10.5, 12.0), (0, 12.2)], (0, -0.3, 0), 18, False))
+    for k in range(7):  # buttress roots
+        a = 2 * math.pi * k / 7 + 0.3
+        wood.append(tube_along(f"Q_root{k}", [(9.5 * math.cos(a), 9.0, 9.5 * math.sin(a)), (15.0 * math.cos(a + 0.15), 2.5, 15.0 * math.sin(a + 0.15)), (22.0 * math.cos(a + 0.3), -0.3, 22.0 * math.sin(a + 0.3))], 2.4))
+    ends = []
+    for b in range(7):
+        a = 2 * math.pi * b / 7 + random.uniform(-0.2, 0.2); p0 = tp(random.uniform(0.62, 0.98)); Rb = R * random.uniform(0.42, 0.58)
+        pts = [p0 + Vector((Rb * t * math.cos(a + 0.6 * t), H * 0.42 * t - 3 * t * t + 2 * math.sin(3 * t), Rb * t * math.sin(a + 0.6 * t))) for t in [i / 6 for i in range(7)]]
+        wood.append(tube_along(f"Q_bA{b}", [tuple(p) for p in pts[:4]], 4.2, res=8)); wood.append(tube_along(f"Q_bB{b}", [tuple(p) for p in pts[3:]], 2.8))
+        for tw in range(2):  # twigs into the canopy
+            q = pts[3 + 2 * tw]; d = Vector((math.cos(a + 1.2 * (tw - 0.5)), 1.1, math.sin(a + 1.2 * (tw - 0.5)))).normalized()
+            wood.append(tube_along(f"Q_tw{b}{tw}", [tuple(q), tuple(q + d * 6), tuple(q + d * 11 + Vector((0, 2, 0)))], 1.3))
+        ends.append(pts[-1])
+    C = Vector((0, H, 0)); cents = list(ends)
+    for i in range(24):
+        y = random.uniform(-0.3, 0.85); rr = math.sqrt(max(0.0, 1 - y * y)); a = random.uniform(0, 2 * math.pi)
+        cents.append(C + Vector((R * 0.85 * rr * math.cos(a), R * 0.28 * y, R * 0.85 * rr * math.sin(a))))
+    for i in range(9):  # interior puffs (lesson 4 of pass 7)
+        a = random.uniform(0, 2 * math.pi); r = random.uniform(0, R * 0.45)
+        cents.append(C + Vector((r * math.cos(a), random.uniform(0, 6), r * math.sin(a))))
+    for c in cents:
+        ico(A, c, cl * 0.95, 1, (1, 0.7, 1))
+        out = (c - C); out = out.normalized() if out.length > 0.1 else Vector((0, 1, 0))
+        for j in range(20):
+            rd = Vector((random.gauss(0, 1), random.gauss(0, 1), random.gauss(0, 1))).normalized()
+            d = (out * 0.7 + rd + Vector((0, 0.3, 0))).normalized(); L = cl * random.uniform(0.7, 1.1)
+            card(A, Bm, c + d * cl * 0.55, d, L, L * 0.38, 0.15, random.uniform(-0.8, 0.8))
+    merge_objs("K_BigTree8_wood", wood); bm_obj("K_BigTree8_leaf", A); bm_obj("K_BigTree8_leafRim", Bm)
+
+def build_pod8():
+    """Blue crystal pod (wall tops beside the lanterns, Story ring sides): a faceted 6-sided spindle about 4 x 6.5 with
+    a gold cradle ring at the base."""
+    clear_piece("K_Pod8_"); clear_piece("Q_")
+    gl = [flat(lathe("Q_pod", [(0, 0), (1.4, 0.6), (2.0, 2.4), (1.9, 4.4), (1.0, 5.8), (0, 6.6)], seg=6, smooth=False))]
+    gd = [lathe_at("Q_cradle", [(0, -0.4), (1.7, -0.4), (2.0, 0.4), (1.5, 0.9), (0, 0.9)], (0, 0, 0), 12, False)]
+    merge_objs("K_Pod8_glass", gl); merge_objs("K_Pod8_gold", gd)
+
+def build_all8():
+    build_scale8(); build_fall8(); build_ruin8(); build_skull8(); build_expring8(); build_expgate8(); build_bigtree8(); build_pod8()
+
+R8_PREFIXES = ("K_Scale8_", "K_Fall8_", "K_Ruin8_", "K_Dome8_", "K_Skull8_", "K_ExpRing8_", "K_ExpGate8_", "K_BigTree8_", "K_Pod8_")
+
+def export_r8(path):
+    """Z-up + UVs (new pieces only), then export ONLY the pass-8 pieces; Studio merges them into the r7 kit."""
+    to_zup_and_uv()
+    bpy.ops.object.select_all(action='DESELECT')
+    sel = [o for o in bpy.data.objects if o.type == 'MESH' and o.name.startswith(R8_PREFIXES)]
+    for o in sel: o.select_set(True)
+    bpy.context.view_layer.objects.active = sel[0]
+    bpy.ops.export_scene.fbx(filepath=path, use_selection=True, object_types={'MESH'}, apply_unit_scale=True,
+                             mesh_smooth_type='FACE', use_mesh_modifiers=True, axis_forward='-Z', axis_up='Y')
+    return [o.name for o in sel]
+
+R8B_PREFIXES = ("K_Scale8_", "K_Skull8_")
+
+def export_r8b(path):
+    """Re-export of the fixed skull only (plus the scale cube), merged into Kit by build_plaza.lua as ae_kit_r8b."""
+    to_zup_and_uv()
+    bpy.ops.object.select_all(action='DESELECT')
+    sel = [o for o in bpy.data.objects if o.type == 'MESH' and o.name.startswith(R8B_PREFIXES)]
+    for o in sel: o.select_set(True)
+    bpy.context.view_layer.objects.active = sel[0]
+    bpy.ops.export_scene.fbx(filepath=path, use_selection=True, object_types={'MESH'}, apply_unit_scale=True,
+                             mesh_smooth_type='FACE', use_mesh_modifiers=True, axis_forward='-Z', axis_up='Y')
+    return [o.name for o in sel]
