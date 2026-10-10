@@ -14,3 +14,7 @@ and the craft in `wiki/roblox-build-workflow/` (Construction Styles, 6 Blender M
   exported, never saved. `kit/ref_export/` is gitignored.
 - File > Save to File for the practice place (never Ctrl+S). Lighting.Technology: read/set offline with tools/set_technology.py.
 - After every review round: send Edward a comparison sheet; add new constructions to `5 Object Recipes`.
+- Never send Delete, Backspace or Ctrl+A to Studio by computer use. Studio routes them to the Explorer when a text box has not
+  taken focus, and Ctrl+A then Backspace deletes the whole Workspace (happened 2026-10-10 on the Shadow PC; undone with Edit >
+  Undo). Clear filters with their X button, clear the selection with `Selection:Set({})` in Luau, and check
+  `#workspace.Plaza:GetDescendants()` before every Save to File.
