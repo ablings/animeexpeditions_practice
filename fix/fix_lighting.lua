@@ -11,9 +11,18 @@ new("BloomEffect", { Intensity = 1, Size = 56, Threshold = 2 })
 new("ColorCorrectionEffect", { Brightness = 0.01, Contrast = 0.12, Saturation = 0.14 })
 new("SunRaysEffect", { Intensity = 0.15, Spread = 0.7 })
 local sky = L:FindFirstChildOfClass("Sky") or Instance.new("Sky", L); sky.SunAngularSize = 10
--- pass 4: own cloudy day skybox (tex/make_ae_tex4.py), uploaded via the file server
-local SKY = { Up = 96646909420645, Dn = 92885134578521, Ft = 122596386826953, Bk = 137792395717714, Lf = 128311943510983, Rt = 138049081543674 }
+-- pass 5: own cloudy day skybox v2 (tex/make_ae_tex5.py: one panorama across the 4 sides, no clouds on the up face,
+-- which removes the pass-4 corner artefact), uploaded via the file server
+local SKY = { Up = 71892846199507, Dn = 78820631398749, Ft = 126129044892365, Bk = 113669221037411, Lf = 106268068341369, Rt = 97088461169211 }
 for k, id in pairs(SKY) do sky["Skybox" .. k] = "rbxassetid://" .. id end
 sky.CelestialBodiesShown = true
 workspace.StreamingEnabled = false
+-- pass 5 (round-2 review item 10): more contrast between sun and shade sides, warm grade, haze for the far skyline
+L.Ambient = Color3.fromRGB(110, 115, 130); L.OutdoorAmbient = Color3.fromRGB(110, 115, 130); L.ShadowSoftness = 0.3
+local cc = L:FindFirstChildOfClass("ColorCorrectionEffect"); cc.Contrast = 0.22; cc.Saturation = 0.2; cc.TintColor = Color3.fromRGB(255, 245, 230)
+local bl = L:FindFirstChildOfClass("BloomEffect"); bl.Intensity = 0.5; bl.Threshold = 1.1
+local at = L:FindFirstChildOfClass("Atmosphere"); at.Density = 0.3; at.Haze = 1.0; at.Color = Color3.fromRGB(200, 220, 255); at.Offset = 0.1
+-- pass 5: the uploaded skybox clouds did not show in the captures, so add Roblox's own volumetric Terrain clouds too
+local cl = workspace.Terrain:FindFirstChildOfClass("Clouds") or Instance.new("Clouds", workspace.Terrain)
+cl.Cover = 0.55; cl.Density = 0.55; cl.Color = Color3.fromRGB(255, 255, 255)
 return "lighting matched"
