@@ -18,10 +18,12 @@ for k, id in pairs(SKY) do sky["Skybox" .. k] = "rbxassetid://" .. id end
 sky.CelestialBodiesShown = true
 workspace.StreamingEnabled = false
 -- pass 5 (round-2 review item 10): more contrast between sun and shade sides, warm grade, haze for the far skyline
-L.Ambient = Color3.fromRGB(110, 115, 130); L.OutdoorAmbient = Color3.fromRGB(110, 115, 130); L.ShadowSoftness = 0.3
-local cc = L:FindFirstChildOfClass("ColorCorrectionEffect"); cc.Contrast = 0.22; cc.Saturation = 0.2; cc.TintColor = Color3.fromRGB(255, 245, 230)
+-- pass 6: the pass-5 Ambient/OutdoorAmbient (110,115,130) and Contrast 0.22 override is REMOVED: it was darker than the
+-- reference's own values (Ambient 102,74,101 / OutdoorAmbient 169,165,184 / Contrast 0.12) and turned every shaded
+-- gate face navy. The reference values set at the top now stand; only a warm tint is kept.
+local cc = L:FindFirstChildOfClass("ColorCorrectionEffect"); cc.TintColor = Color3.fromRGB(255, 248, 238)
 local bl = L:FindFirstChildOfClass("BloomEffect"); bl.Intensity = 0.5; bl.Threshold = 1.1
-local at = L:FindFirstChildOfClass("Atmosphere"); at.Density = 0.3; at.Haze = 1.0; at.Color = Color3.fromRGB(200, 220, 255); at.Offset = 0.1
+local at = L:FindFirstChildOfClass("Atmosphere"); at.Density = 0.3; at.Haze = 1.2; at.Color = Color3.fromRGB(200, 215, 230); at.Offset = 0.1 -- pass 6: less blue haze
 -- pass 5: the uploaded skybox clouds did not show in the captures, so add Roblox's own volumetric Terrain clouds too
 local cl = workspace.Terrain:FindFirstChildOfClass("Clouds") or Instance.new("Clouds", workspace.Terrain)
 cl.Cover = 0.55; cl.Density = 0.55; cl.Color = Color3.fromRGB(255, 255, 255)

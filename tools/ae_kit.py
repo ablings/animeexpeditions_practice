@@ -931,3 +931,369 @@ def export_r5(path):
     bpy.ops.export_scene.fbx(filepath=path, use_selection=True, object_types={'MESH'}, apply_unit_scale=True,
                              mesh_smooth_type='FACE', use_mesh_modifiers=True, axis_forward='-Z', axis_up='Y')
     return [o.name for o in sel]
+
+
+# ---------------------------------------------------------------- pass 6: crown crest, flat gold bands, tree mix, islands, patches
+# Freestyle from the picture set and the round-3 review. Same plaza frame as passes 4-5.
+def _area2(pts):
+    return sum(pts[i][0] * pts[(i + 1) % len(pts)][1] - pts[(i + 1) % len(pts)][0] * pts[i][1] for i in range(len(pts)))
+
+def ribbon_uy(name, pts, width, w0, thick=0.14, closed=False):
+    """Flat inset band (the reference's gold trim): a strip following a (u, y) outline on its INSIDE, width studs wide,
+    standing thick proud of the face at depth w0 (toward the viewer, i.e. lower w). Solid, flat shaded."""
+    n = len(pts); sgn = 1 if _area2(pts) > 0 else -1
+    inner = []
+    for i in range(n):
+        p = Vector(pts[i])
+        a = Vector(pts[i - 1]) if (closed or i > 0) else None
+        b = Vector(pts[(i + 1) % n]) if (closed or i < n - 1) else None
+        segs = []
+        if a is not None: segs.append((p - a).normalized())
+        if b is not None: segs.append((b - p).normalized())
+        nn = [Vector((-t.y, t.x)) * sgn for t in segs]
+        m = sum(nn, Vector((0, 0))).normalized()
+        k = max(0.5, m.dot(nn[0]))
+        inner.append(p + m * (width / k))
+    bm = bmesh.new()
+    O = [[bm.verts.new(P(u, y, w)) for (u, y) in pts] for w in (w0 - thick, w0 + 0.05)]
+    I = [[bm.verts.new(P(v.x, v.y, w)) for v in inner] for w in (w0 - thick, w0 + 0.05)]
+    rng_ = range(n) if closed else range(n - 1)
+    for i in rng_:
+        j = (i + 1) % n
+        bm.faces.new((O[0][i], O[0][j], I[0][j], I[0][i]))
+        bm.faces.new((O[1][i], I[1][i], I[1][j], O[1][j]))
+        bm.faces.new((O[0][i], O[1][i], O[1][j], O[0][j]))
+        bm.faces.new((I[0][i], I[0][j], I[1][j], I[1][i]))
+    if not closed:
+        for i in (0, n - 1):
+            bm.faces.new((O[0][i], I[0][i], I[1][i], O[1][i]))
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+    return flat(mesh_obj(name, bm, False))
+
+def ribbon_xz(name, pts, width, y, thick=0.12):
+    """Flat band lying on a horizontal face, offset to one side of the polyline (x, z) by width (sign picks the side)."""
+    bm = bmesh.new(); L = []
+    for i, p in enumerate(pts):
+        a = Vector(pts[max(0, i - 1)]); b = Vector(pts[min(len(pts) - 1, i + 1)]); t = (b - a).normalized()
+        L.append(Vector(p) + Vector((-t.y, t.x)) * width)
+    T = [[bm.verts.new((p[0], y + h, p[1])) for p in pts] for h in (0, thick)]
+    U = [[bm.verts.new((p.x, y + h, p.y)) for p in L] for h in (0, thick)]
+    for i in range(len(pts) - 1):
+        bm.faces.new((T[1][i], T[1][i + 1], U[1][i + 1], U[1][i])); bm.faces.new((T[0][i], U[0][i], U[0][i + 1], T[0][i + 1]))
+        bm.faces.new((T[0][i], T[0][i + 1], T[1][i + 1], T[1][i])); bm.faces.new((U[0][i], U[1][i], U[1][i + 1], U[0][i + 1]))
+    for i in (0, len(pts) - 1):
+        bm.faces.new((T[0][i], T[1][i], U[1][i], U[0][i]))
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+    return flat(mesh_obj(name, bm, False))
+
+def lantern6(tag, loc, base_y, sc=1.4):
+    """Pass-5 lantern (1.4x) with 10 gold dome ribs and a small bright core inside the glass; placed 2 lower by the caller."""
+    L = lantern5(tag, loc, base_y, sc); L["core"] = []
+    x, z = loc[0], loc[2]
+    for i in range(10):
+        a = 2 * math.pi * i / 10; pts = []
+        for j in range(9):
+            t = j / 8; ph = math.pi / 2 * t; r0 = 3.0 * math.cos(ph) * (1 + 0.12 * math.sin(math.pi * t)) * 1.06 + 0.05
+            pts.append((x + sc * r0 * math.cos(a), base_y + sc * (11.2 + 3.9 * math.sin(ph)), z + sc * r0 * math.sin(a)))
+        L["gold"].append(tube_along(f"{tag}_rib{i}", pts, 0.14))
+    L["core"].append(lathe_at(f"{tag}_hot", [(0, 5.6 * sc), (0.55 * sc, 6.0 * sc), (0.7 * sc, 7.6 * sc), (0.45 * sc, 9.2 * sc), (0, 9.6 * sc)], (x, base_y, z), 10))
+    return L
+
+def build_hero6():
+    """Corner hero piece, pass 6: crown crest (wide see-through window, 3-wide hooked arms, sloping shoulders), flat inset
+    gold bands instead of round tubes on the gate, basin 2 further forward, curved water sheet instead of the slab,
+    lanterns 2 lower with ribbed domes and hot cores."""
+    clear_piece("K_Hero"); clear_piece("Q_")
+    G = {"stone": [], "rib": [], "darkStone": [], "gold": [], "goldBas": [], "goldLan": [], "blue": [], "glass": [], "core": [],
+         "water": [], "sheet": [], "foam": [], "vault": []}
+    W0, W1 = 33.0, 39.5
+    outer = arch_outline(10.0, 5.0, 5.0); in1 = arch_outline(7.6, 4.2, 4.0); in2 = arch_outline(7.0, 4.0, 3.6); in3 = arch_outline(6.5, 3.8, 3.2)
+    G["stone"].append(arch_band("Q_arch", outer, in1, W0, W1))
+    G["rib"].append(arch_band("Q_rib1", in1, in2, W0 + 0.7, W1))
+    G["darkStone"].append(arch_band("Q_rib2", in2, in3, W0 + 1.4, W1))
+    G["gold"].append(ribbon_uy("Q_gArchO", outer, 0.55, W0))
+    G["gold"].append(ribbon_uy("Q_gArchI", arch_outline(8.25, 4.35, 4.6), 0.45, W0))
+    G["gold"].append(ribbon_uy("Q_gArchR", in1, 0.3, W0 + 0.7))
+    # crown crest: sloping shoulders from the band, two 3-wide arms with a chamfered (hooked) outer top corner, a 4.8-wide window
+    C = [(-8.0, 7.9), (8.0, 7.9), (5.7, 10.7), (5.7, 12.5), (4.8, 13.5), (2.4, 13.5), (2.4, 9.4), (-2.4, 9.4), (-2.4, 13.5), (-4.8, 13.5), (-5.7, 12.5), (-5.7, 10.7)]
+    G["stone"].append(extrude_uy("Q_crest", C, W0 + 0.3, W0 + 3.8))
+    G["gold"].append(ribbon_uy("Q_gCrest", C[1:] + C[:1], 0.42, W0 + 0.3, closed=True))
+    G["vault"].append(extrude_uy("Q_crestWin", [(-2.4, 9.4), (2.4, 9.4), (2.4, 9.9), (-2.4, 9.9)], W0 + 0.6, W0 + 3.5))
+    # shoulder wings (as pass 5) with flat gold top strips
+    G["stone"].append(prism("Q_wingL", [(17, 6.0, -31.1), (17, 10.0, -31.1), (17, 7.2, -48), (17, 6.0, -48)], (2.6, 0, 0)))
+    G["stone"].append(prism("Q_wingR", [(31.1, 6.0, -17), (31.1, 10.0, -17), (48, 7.2, -17), (48, 6.0, -17)], (0, 0, -2.6)))
+    G["gold"].append(prism("Q_gWingL", [(16.85, 9.45, -31.1), (16.85, 10.05, -31.1), (16.85, 7.25, -48), (16.85, 6.65, -48)], (0.2, 0, 0)))
+    G["gold"].append(prism("Q_gWingR", [(31.1, 9.45, -16.85), (31.1, 10.05, -16.85), (48, 7.25, -16.85), (48, 6.65, -16.85)], (0, 0, -0.2)))
+    # vault interior (lighter slate), gold shelf, curved water sheet from the shelf into the upper bowl
+    G["vault"].append(rbox_rot("Q_nicheBack", 13.4, 7.4, 0.8, P(0, 3.7, 40.2), math.radians(-45), 0.2, 1))
+    G["vault"].append(rbox_rot("Q_nicheTop", 13.4, 0.8, 1.6, P(0, 7.2, 40.0), math.radians(-45), 0.2, 1))
+    G["gold"].append(rbox_rot("Q_shelf", 12.6, 0.5, 1.4, P(0, 5.0, 39.3), math.radians(-45), 0.2, 1))
+    G["vault"].append(rbox_rot("Q_shelfBk", 12.6, 0.8, 0.8, P(0, 6.0, 39.6), math.radians(-45), 0.2, 1))
+    bw = 29.6; bx, _, bz = P(0, 0, bw)
+    bm = bmesh.new(); prev = None
+    for k in range(13):  # arc from the shelf lip (w 38.6, y 5.3) out and down into the upper bowl
+        t = k / 12; w = 38.6 + (bw + 1.2 - 38.6) * t; y = 5.3 + 0.9 * math.sin(math.pi * t * 0.5) - 2.5 * t * t
+        hw = 1.3 + 0.5 * t
+        row = [P(-hw, y, w), P(hw, y, w)]
+        if prev:
+            ds_quad(bm, [prev[0], prev[1], row[1], row[0]], 0.04)
+        prev = row
+    G["sheet"].append(bm_obj("Q_sheet", bm))
+    G["foam"].append(lathe_at("Q_splash", [(0, 3.7), (1.5, 3.7), (1.1, 4.3), (0.4, 4.7), (0, 4.75)], P(0, 0, bw + 0.6), 10, False))
+    # corner block (y 0..6), notch behind the vault
+    poly = [P(-10, 0, 34), P(-6.5, 0, 34), P(-6.5, 0, 41), P(6.5, 0, 41), P(6.5, 0, 34), P(10, 0, 34), (62, 0, -17), (62, 0, -62), (17, 0, -62)]
+    G["stone"].append(extrude_plan("Q_block", [(p[0], p[2]) for p in poly], 0.0, 6.0))
+    G["gold"].append(ribbon_xz("Q_gTopL", [(17.0, -62), (17.0, -31.1)], -0.5, 6.0))
+    G["gold"].append(ribbon_xz("Q_gTopR", [(62, -17.0), (31.1, -17.0)], -0.5, 6.0))
+    G["gold"].append(prism("Q_gStrL", [(16.85, 0.5, -28), (16.85, 1.1, -28), (16.85, 6.6, -48), (16.85, 6.0, -48)], (0.2, 0, 0)))
+    G["gold"].append(prism("Q_gStrR", [(28, 0.5, -16.85), (28, 1.1, -16.85), (48, 6.6, -16.85), (48, 6.0, -16.85)], (0, 0, -0.2)))
+    # two-tier basin standing forward of the arch (centre w 29.6, was 31.6)
+    G["goldBas"].append(lathe_at("Q_basinFoot", [(0, 0), (6.4, 0), (6.4, 0.45), (6.0, 0.6), (0, 0.6)], (bx, 0, bz), 40, False))
+    G["stone"].append(lathe_at("Q_basin", [(0, 0.6), (5.6, 0.6), (5.6, 2.4), (4.9, 2.4), (4.9, 1.6), (3.0, 1.6), (3.0, 3.9), (2.5, 3.9), (2.5, 3.3), (0, 3.3)], (bx, 0, bz), 40))
+    G["rib"].append(lathe_at("Q_basinBand", [(5.65, 0.9), (5.75, 1.0), (5.75, 1.6), (5.65, 1.7)], (bx, 0, bz), 40))
+    G["goldBas"].append(lathe_at("Q_gBasinA", [(4.95, 2.4), (5.65, 2.4), (5.65, 2.55), (4.95, 2.55)], (bx, 0, bz), 40, False))
+    G["goldBas"].append(lathe_at("Q_gBasinB", [(2.5, 3.9), (3.05, 3.9), (3.05, 4.02), (2.5, 4.02)], (bx, 0, bz), 32, False))
+    for i in range(16):
+        a = 2 * math.pi * i / 16
+        G["goldBas"].append(rbox(f"Q_bar{i}", 0.22, 1.3, 0.22, 0.05, 1, (bx + 3.08 * math.cos(a), 2.6, bz + 3.08 * math.sin(a))))
+    G["water"].append(lathe_at("Q_wBasinA", [(0, 2.05), (4.95, 2.05)], (bx, 0, bz), 40))
+    G["water"].append(lathe_at("Q_wBasinB", [(0, 3.65), (2.55, 3.65)], (bx, 0, bz), 24))
+    # raised pool behind the gate (as pass 5)
+    px, _, pz = P(0, 0, 55.0)
+    G["stone"].append(lathe_at("Q_poolRim", [(12.4, 6.0), (14.5, 6.0), (14.5, 7.6), (14.1, 8.0), (12.8, 8.0), (12.4, 7.6), (12.4, 6.0)], (px, 0, pz), 48))
+    G["gold"].append(lathe_at("Q_gPool", [(13.0, 8.0), (13.9, 8.0), (13.9, 8.1), (13.0, 8.1)], (px, 0, pz), 64, False))
+    G["water"].append(lathe_at("Q_wPool", [(0, 7.0), (12.45, 7.0)], (px, 0, pz), 48))
+    G["darkStone"].append(lathe_at("Q_rock", [(0, 6.0), (4.5, 6.0), (4.1, 7.8), (2.8, 9.2), (1.0, 9.8), (0, 9.8)], (px, 0, pz), 9, False))
+    for s in (-1, 1):
+        L = lantern6(f"Q_lan{s}", P(s * 14.0, 0, 52.0), 4.0)   # 2 lower: the drum bottom sinks into the block
+        for k, v in L.items(): G["goldLan" if k == "gold" else k] += v
+    out = []
+    for k, objs in G.items():
+        if objs: out.append(merge_objs(f"K_Hero_{k}", objs, mirror4=True).name)
+    st = bpy.data.objects["K_Hero_stone"]
+    bm = bmesh.new(); bm.from_mesh(st.data); bm2 = bm.copy()
+    def top(f):
+        c = f.calc_center_median()
+        return f.normal.y > 0.9 and all(abs(v.co.y - 6.0) < 0.01 for v in f.verts) and abs(c.x) > 16.9 and abs(c.z) > 16.9
+    bmesh.ops.delete(bm, geom=[f for f in bm.faces if top(f)], context='FACES'); bm.to_mesh(st.data); bm.free()
+    bmesh.ops.delete(bm2, geom=[f for f in bm2.faces if not top(f)], context='FACES')
+    me = bpy.data.meshes.new("K_Hero_turf"); bm2.to_mesh(me); bm2.free(); ob = bpy.data.objects.new("K_Hero_turf", me); coll().objects.link(ob)
+    return out + ["K_Hero_turf"]
+
+def build_palm6(tag, seed, H=22.0, nf=8, FL=10.0, bend=3.0):
+    """Ref-style palm: tan trunk with soft ring bulges, crown of 8 BROAD arched fronds (wide leaflet cards, fewer of them)."""
+    random.seed(seed); clear_piece(f"K_{tag}_"); clear_piece("Q_")
+    A, B = bmesh.new(), bmesh.new(); wood = []
+    tp = lambda t: Vector((bend * t * t, H * t, 0.0))
+    wood.append(tube_along("Q_trunk", [tuple(tp(i / 10)) for i in range(11)], 0.85))
+    for i in range(1, 12):
+        p = tp(i / 12); wood.append(lathe_at(f"Q_ring{i}", [(0, -0.45), (1.05, -0.2), (1.0, 0.25), (0, 0.4)], tuple(p), 8, False))
+    top = tp(1.0); wood.append(lathe_at("Q_boss", [(0, -1.2), (1.3, -0.7), (1.4, 0.3), (0.6, 1.0), (0, 1.1)], tuple(top), 10, False))
+    for i in range(nf):
+        a = 2 * math.pi * i / nf + random.uniform(-0.15, 0.15); hz = Vector((math.cos(a), 0, math.sin(a)))
+        fl = FL * random.uniform(0.9, 1.1); rise = random.uniform(0.3, 0.5)
+        q = lambda s: top + hz * (fl * s) + Vector((0, fl * (rise * s - 0.8 * s * s), 0))
+        side = hz.cross(Vector((0, 1, 0))).normalized()
+        for k in range(1, 9):
+            s = k / 9; p = q(s); tan = (q(min(1, s + 0.05)) - q(max(0, s - 0.05))).normalized()
+            ll = fl * (0.33 * math.sin(math.pi * min(1.0, s * 1.1)) + 0.08)
+            for sg in (-1, 1):
+                d = (side * sg + tan * 0.9 + Vector((0, -0.3, 0))).normalized()
+                card(A, B, p, d, ll, 0.95, 0.12, 0.3 * sg, (0.25, 0.75, 0.6, 0.35, 0.0), nA=2)
+        for k in range(10):
+            p0, p1 = q(k / 10), q((k + 1) / 10)
+            ds_quad(A, [p0 - side * 0.3, p1 - side * 0.22, p1 + side * 0.22, p0 + side * 0.3])
+    merge_objs(f"K_{tag}_wood", wood); bm_obj(f"K_{tag}_leaf", A); bm_obj(f"K_{tag}_leafRim", B)
+
+def build_fluffy6(tag, seed, H=16.0, R=12.5, nclus=18, ncard=30, trunk_r=1.3, cl=2.8, hang=0):
+    """Fluffy broadleaf tree (gold / blue / purple in the ref): a round canopy of many small leaf-card puffs on dark
+    cores, a thick root-flared trunk; hang>0 adds weeping strands (wisteria)."""
+    random.seed(seed); clear_piece(f"K_{tag}_"); clear_piece("Q_")
+    A, B = bmesh.new(), bmesh.new(); wood = []
+    C = Vector((random.uniform(-0.6, 0.6), H, 0))
+    wood.append(tube_along("Q_trunk", [(0, -0.5, 0), (0.2, H * 0.35, 0.1), (C.x * 0.6, H * 0.7, 0), (C.x, H - 1.0, 0)], trunk_r))
+    wood.append(lathe_at("Q_flare", [(0, 0), (trunk_r * 2.6, 0), (trunk_r * 1.5, trunk_r * 1.2), (trunk_r * 1.05, trunk_r * 3.0), (0, trunk_r * 3.2)], (0, -0.3, 0), 12, False))
+    cents = []
+    for i in range(nclus):
+        y = random.uniform(-0.45, 0.95); rr = math.sqrt(max(0.0, 1 - y * y)); a = random.uniform(0, 2 * math.pi)
+        cents.append(C + Vector((R * 0.7 * rr * math.cos(a), R * 0.45 * y, R * 0.7 * rr * math.sin(a))))
+    for k, c in enumerate(cents[:6]):
+        wood.append(tube_along(f"Q_br{k}", [tuple(C - Vector((0, 2.5, 0))), tuple(c.lerp(C, 0.3))], trunk_r * 0.45))
+    for c in cents:
+        ico(A, c, cl * 0.9, 1, (1, 0.8, 1))
+        out = (c - C); out = out.normalized() if out.length > 0.1 else Vector((0, 1, 0))
+        for j in range(ncard):
+            rd = Vector((random.gauss(0, 1), random.gauss(0, 1), random.gauss(0, 1))).normalized()
+            d = (out * 0.8 + rd).normalized()
+            L = cl * random.uniform(0.7, 1.15)
+            card(A, B, c + d * cl * 0.55, d, L, L * 0.38, 0.15, random.uniform(-0.8, 0.8))
+    for h in range(hang):
+        a = random.uniform(0, 2 * math.pi); r = R * random.uniform(0.45, 0.75)
+        b = C + Vector((r * math.cos(a), -R * 0.15, r * math.sin(a))); Lh = random.uniform(3.0, 6.0)
+        for k in range(5):
+            p = b + Vector((0, -Lh * k / 5, 0)); dd = Vector((math.cos(a + k), -0.6, math.sin(a + k))).normalized()
+            card(A, B, p, dd, 1.6, 0.7, 0.3, 0, nA=1)
+    o1 = merge_objs(f"K_{tag}_wood", wood); bm_obj(f"K_{tag}_leaf", A); bm_obj(f"K_{tag}_leafRim", B)
+    return o1
+
+def build_deadtree6(tag="DeadTree", seed=31, H=14.0):
+    """Bare twisted tree (the Raid side): recursive branching tubes, wood only."""
+    random.seed(seed); clear_piece(f"K_{tag}_"); clear_piece("Q_")
+    parts = []
+    def br(p, d, L, r, depth):
+        pts = [p]; q = Vector(p)
+        for k in range(4):
+            d = (d + Vector((random.uniform(-0.35, 0.35), random.uniform(-0.1, 0.25), random.uniform(-0.35, 0.35)))).normalized()
+            q = q + d * (L / 4); pts.append(q.copy())
+        parts.append(tube_along(f"Q_b{len(parts)}", [tuple(x) for x in pts], r))
+        if depth > 0:
+            for k in range(random.choice((2, 3))):
+                nd = (d + Vector((random.uniform(-1, 1), random.uniform(0.0, 0.6), random.uniform(-1, 1)))).normalized()
+                br(q, nd, L * 0.62, r * 0.6, depth - 1)
+    br(Vector((0, -0.5, 0)), Vector((0, 1, 0)), H * 0.55, 0.8, 3)
+    parts.append(lathe_at("Q_flare", [(0, 0), (1.9, 0), (1.0, 0.9), (0.8, 2.0), (0, 2.1)], (0, -0.3, 0), 8, False))
+    merge_objs(f"K_{tag}_wood", parts)
+
+def build_island6(seed=61, R=40.0):
+    """Floating island, pass 6: grey faceted rock underside 34 deep, THICK green cap with an overhanging lip, 40 hanging
+    vine strips, a tall ruined white tower, a second tower and a broken arcade, two thin waterfalls."""
+    random.seed(seed); clear_piece("K_Isl6_"); clear_piece("Q_")
+    prof = [(0, -34), (5, -30), (10, -24), (17, -17), (24, -10), (31, -5), (R - 2, -1.5), (R, 0.0)]
+    rock = lathe("Q_rock", prof, seg=20, smooth=False)
+    for v in rock.data.vertices:
+        if v.co.y < -0.6:
+            f = 1 + random.uniform(-0.15, 0.15); v.co.x *= f; v.co.z *= f; v.co.y += random.uniform(-2.0, 2.0)
+    capP = [(0, 3.6), (R * 0.5, 3.4), (R - 2, 3.0), (R + 1.0, 2.2), (R + 1.4, 0.6), (R + 0.8, -1.4), (R - 0.5, -1.0)]
+    grass = [lathe_at("Q_cap", capP, (0, 0, 0), 32, False)]
+    vines = bmesh.new()
+    for k in range(40):
+        a = 2 * math.pi * k / 40 + random.uniform(-0.05, 0.05); r = R + 0.9; L = random.uniform(5, 14)
+        c = Vector((r * math.cos(a), -1.2, r * math.sin(a))); t = Vector((-math.sin(a), 0, math.cos(a))) * 0.45
+        ds_quad(vines, [c - t, c + t, c + t * 0.4 + Vector((0, -L, 0)), c - t * 0.4 + Vector((0, -L, 0))])
+    stone = []
+    tx, tz, th = 12, -8, 34.0
+    stone.append(lathe_at("Q_tower", [(0, 0), (4.6, 0), (4.6, 1.2), (4.0, 1.6), (4.0, th), (4.6, th + 0.6), (4.6, th + 2.0), (0, th + 2.0)], (tx, 3.4, tz), 12, False))
+    for j in range(6):
+        a = 2 * math.pi * j / 6
+        if random.random() < 0.7: stone.append(rbox_rot(f"Q_cren{j}", 1.6, random.uniform(1.4, 3.0), 1.6, (tx + 4.0 * math.cos(a), 3.4 + th + 3.0, tz + 4.0 * math.sin(a)), a, 0.15, 1))
+    stone.append(lathe_at("Q_tower2", [(0, 0), (3.4, 0), (3.0, 0.8), (3.0, 20), (3.5, 20.6), (0, 20.6)], (-14, 3.4, 6), 10, False))
+    for k in range(4):
+        x = 6 - 6 * k; stone.append(rbox_rot(f"Q_pier{k}", 1.8, 12, 1.8, (x, 3.4 + 6, -4 + 3 * k), 0.4, 0.2, 1))
+    stone.append(rbox_rot("Q_lintel", 20, 1.6, 2.0, (-3, 3.4 + 12.5, 0.5), math.atan2(9, -18) * -1, 0.2, 1))
+    fall = []
+    for k, a in enumerate((0.5, 2.6)):
+        x, z = (R + 1.0) * math.cos(a), (R + 1.0) * math.sin(a)
+        fall.append(rbox_rot(f"Q_fall{k}", 3.0, 60.0, 0.5, (x, -29.0, z), -a + math.pi / 2, 0.2, 1))
+    merge_objs("K_Isl6_rock", [rock]); merge_objs("K_Isl6_grass", grass); bm_obj("K_Isl6_vine", vines)
+    merge_objs("K_Isl6_white", stone); merge_objs("K_Isl6_foam", fall)
+
+def build_patch6(tag, seed, R=20.0, k=1.0, n=40, thick=0.16):
+    """Organic ground patch: a flat noisy blob (radius R, aspect k) for zoning without straight edges; tinted at placement."""
+    random.seed(seed); clear_piece(f"K_{tag}_")
+    bm = bmesh.new(); ph = [random.uniform(0, 6.28) for _ in range(4)]
+    rs = []
+    for i in range(n):
+        a = 2 * math.pi * i / n
+        f = 1 + 0.18 * math.sin(2 * a + ph[0]) + 0.12 * math.sin(3 * a + ph[1]) + 0.08 * math.sin(5 * a + ph[2]) + random.uniform(-0.05, 0.05)
+        rs.append((R * f * math.cos(a), R * k * f * math.sin(a)))
+    top = [bm.verts.new((x, thick, z)) for x, z in rs]; bot = [bm.verts.new((x, 0, z)) for x, z in rs]
+    c = bm.verts.new((0, thick, 0))
+    for i in range(n):
+        j = (i + 1) % n
+        bm.faces.new((c, top[j], top[i])); bm.faces.new((top[i], top[j], bot[j], bot[i]))
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+    bm_obj(f"K_{tag}_patch", bm)
+
+def build_litter6(tag="Litter", seed=41, R=4.0, n=46):
+    """Leaf litter: small leaf cards lying almost flat over a disc, tinted at placement (red E, blue N, green S/W)."""
+    random.seed(seed); clear_piece(f"K_{tag}_")
+    A, B = bmesh.new(), bmesh.new()
+    for i in range(n):
+        a = random.uniform(0, 2 * math.pi); r = R * math.sqrt(random.random())
+        b = Vector((r * math.cos(a), 0.06, r * math.sin(a))); d = Vector((math.cos(a * 3), random.uniform(0.05, 0.25), math.sin(a * 3))).normalized()
+        card(A, B, b, d, random.uniform(0.9, 1.5), 0.45, 0.02, 0, (0.15, 0.55, 0.45, 0.25, 0.0))
+    bm_obj(f"K_{tag}_leaf", A); bm_obj(f"K_{tag}_leafRim", B)
+
+def _band_xy(name, o, i, d0, d1, axis):
+    """Solid band between two (lateral, y) outlines; axis 'x' extrudes along X (lateral on Z), 'z' along Z (lateral on X)."""
+    bm = bmesh.new()
+    V = (lambda u, y, d: (d, y, u)) if axis == 'x' else (lambda u, y, d: (u, y, d))
+    Of = [bm.verts.new(V(u, y, d0)) for u, y in o]; Ob = [bm.verts.new(V(u, y, d1)) for u, y in o]
+    If = [bm.verts.new(V(u, y, d0)) for u, y in i]; Ib = [bm.verts.new(V(u, y, d1)) for u, y in i]
+    for k in range(len(o) - 1):
+        bm.faces.new((Of[k], Of[k + 1], If[k + 1], If[k])); bm.faces.new((Ob[k], Ib[k], Ib[k + 1], Ob[k + 1]))
+        bm.faces.new((Of[k], Ob[k], Ob[k + 1], Of[k + 1])); bm.faces.new((If[k], If[k + 1], Ib[k + 1], Ib[k]))
+    for k in (0, len(o) - 1): bm.faces.new((Of[k], If[k], Ib[k], Ob[k]))
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces); return flat(mesh_obj(name, bm, False))
+
+def pointed_outline(hw, hs, n=12):
+    cx = hw * 0.6; r = hw + cx
+    L = [(-hw, 0.0), (-hw, hs * 0.5)]
+    for k in range(0, n + 1):
+        t = k / n; a = math.pi - t * math.acos(cx / r)
+        L.append((cx + r * math.cos(a), hs + r * math.sin(a)))
+    return L + [(-u, y) for u, y in reversed(L)][1:]
+
+def build_gothic6():
+    """Raid gate: pointed arch, opening 8.4 wide x about 15 tall, stepped double band, two columns with pinnacles,
+    a back wall, a gable with a round window. Faces -X (the plaza): x = depth, z = lateral."""
+    clear_piece("K_Gothic_"); clear_piece("Q_")
+    stone = [_band_xy("Q_b1", pointed_outline(7.0, 8.0), pointed_outline(5.4, 8.0), -1.0, 2.0, 'x'),
+             _band_xy("Q_b2", pointed_outline(5.4, 8.0), pointed_outline(4.2, 8.0), -0.4, 2.0, 'x')]
+    dark = [rbox("Q_door", 1.0, 15.0, 8.6, 0.1, 1, (1.6, 7.5, 0))]
+    for s in (-1, 1):
+        stone.append(lathe_at(f"Q_col{s}", [(0, 0), (1.3, 0), (1.3, 0.8), (0.9, 1.2), (0.8, 10.5), (1.3, 11.0), (1.4, 11.8), (0, 11.8)], (-2.0, 0, s * 8.6), 12))
+        stone.append(lathe_at(f"Q_pin{s}", [(0, 0), (1.0, 0), (0.0, 7.0)], (-2.0, 11.8, s * 8.6), 6, False))
+    stone.append(rbox("Q_wall", 3.0, 26.0, 24.0, 0.3, 1, (3.5, 13.0, 0)))
+    stone.append(prism("Q_gable", [(-1.2, 19.5, -10.5), (-1.2, 19.5, 10.5), (-1.2, 28.5, 0.6), (-1.2, 28.5, -0.6)], (3.0, 0, 0)))
+    g = lathe("Q_rose", [(0, 0), (2.0, 0), (2.0, 0.3), (0, 0.3)], seg=20, smooth=False)
+    g.rotation_euler = (0, 0, math.radians(90)); g.location = (-1.25, 23.0, 0)
+    merge_objs("K_Gothic_stone", stone); merge_objs("K_Gothic_darkStone", dark); merge_objs("K_Gothic_gold", [g])
+
+def build_spire6():
+    """Gothic spire 25 tall: square base, octagonal shaft, cone with a ball finial."""
+    clear_piece("K_Spire_"); clear_piece("Q_")
+    s = [flat(lathe("Q_base", [(0, 0), (3.4, 0), (3.4, 6.0), (3.0, 6.5), (0, 6.5)], seg=4, start=math.pi / 4, smooth=False)),
+         flat(lathe("Q_shaft", [(0, 6.5), (2.4, 6.5), (2.4, 13.0), (2.7, 13.5), (0, 13.5)], seg=8, smooth=False)),
+         flat(lathe("Q_cone", [(0, 13.5), (2.5, 13.5), (0.3, 24.0), (0, 24.2)], seg=8, smooth=False))]
+    d = [lathe("Q_ball", [(0.7 * math.sin(t), 24.9 - 0.7 * math.cos(t)) for t in [math.pi * k / 6 for k in range(7)]], seg=10)]
+    merge_objs("K_Spire_stone", s); merge_objs("K_Spire_darkStone", d)
+
+def build_exparch6():
+    """Expeditions portal: round arch on two columns, top about 17.5, stepped trim, urns, sign tablet, finial, glass
+    field. Faces -Z: x = lateral, z = depth."""
+    clear_piece("K_ExpArch_"); clear_piece("Q_")
+    teal = [_band_xy("Q_arch", arch_outline(8.5, 9.0, 8.5), arch_outline(6.6, 9.0, 6.6), -1.5, 1.5, 'z')]
+    pale = [_band_xy("Q_trim", arch_outline(6.6, 9.0, 6.6), arch_outline(6.0, 9.0, 6.0), -1.0, 1.0, 'z')]
+    for s in (-1, 1):
+        pale.append(lathe_at(f"Q_col{s}", [(0, 0), (1.6, 0), (1.6, 1.0), (1.1, 1.5), (1.0, 12.0), (1.6, 12.6), (1.7, 13.4), (0, 13.4)], (s * 10.6, 0, 0), 12))
+        pale.append(lathe_at(f"Q_urn{s}", [(0, 13.4), (1.2, 13.6), (1.5, 14.6), (0.6, 15.6), (0, 16.6)], (s * 10.6, 0, 0), 10))
+    pale.append(rbox("Q_sign", 9.0, 2.6, 0.8, 0.3, 1, (0, 19.0, -1.6)))
+    pale.append(lathe_at("Q_fin", [(0, 0), (1.3, 0), (0.2, 4.5), (0, 4.6)], (0, 17.3, 0), 8, False))
+    field = [rbox("Q_field", 12.6, 15.0, 0.3, 0.05, 1, (0, 7.5, 0))]
+    merge_objs("K_ExpArch_teal", teal); merge_objs("K_ExpArch_pale", pale); merge_objs("K_ExpArch_glass", field)
+
+def build_all6():
+    names = build_hero6()
+    build_palm6("Palm6A", 61, H=22, nf=8, FL=10.0, bend=3.0); build_palm6("Palm6B", 62, H=20, nf=9, FL=9.0, bend=-2.4)
+    build_fluffy6("Fluffy", 71, H=15, R=13, nclus=18, ncard=28, trunk_r=1.3, cl=2.9)
+    build_fluffy6("FluffyS", 72, H=8, R=7, nclus=10, ncard=24, trunk_r=0.7, cl=2.0)
+    build_fluffy6("Wisteria", 73, H=13, R=11, nclus=14, ncard=22, trunk_r=1.0, cl=2.6, hang=36)
+    build_deadtree6(); build_island6()
+    build_patch6("PatchA", 81, R=20, k=1.0); build_patch6("PatchB", 82, R=14, k=0.55); build_patch6("PatchC", 83, R=9, k=0.8)
+    build_litter6(); build_gothic6(); build_spire6(); build_exparch6()
+    return names
+
+R6_PREFIXES = R5_PREFIXES + ("K_Palm6A_", "K_Palm6B_", "K_Fluffy_", "K_FluffyS_", "K_Wisteria_", "K_DeadTree_", "K_Isl6_", "K_PatchA_",
+                             "K_PatchB_", "K_PatchC_", "K_Litter_", "K_Gothic_", "K_Spire_", "K_ExpArch_")
+
+def export_r6(path):
+    """Z-up + UVs, then export the pass-6 kit with the export call used since r3."""
+    to_zup_and_uv()
+    bpy.ops.object.select_all(action='DESELECT')
+    sel = [o for o in bpy.data.objects if o.type == 'MESH' and o.name.startswith(R6_PREFIXES)]
+    for o in sel: o.select_set(True)
+    bpy.context.view_layer.objects.active = sel[0]
+    bpy.ops.export_scene.fbx(filepath=path, use_selection=True, object_types={'MESH'}, apply_unit_scale=True,
+                             mesh_smooth_type='FACE', use_mesh_modifiers=True, axis_forward='-Z', axis_up='Y')
+    return [o.name for o in sel]
