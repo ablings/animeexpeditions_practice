@@ -1,0 +1,5 @@
+ref/
+kit/ref_export/
+out/
+*.rbxl.lock
+*.rbxl.bak

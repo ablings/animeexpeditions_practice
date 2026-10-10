@@ -1,0 +1,20 @@
+Main_Decor|c_Main_Decor
+Main_Outer|c_Main_Outer
+Baseplates|c_Baseplates
+Tournament [[DONE]]]|c_Tournament
+Leaderboards[[[DONE]]]|c_Leaderboards
+Showcase [[[DONE]]]|c_Showcase
+Hub[[[DONE]]]|c_Hub
+Raid[[[DONE]]]|c_Raid
+Guilds [[[DONE]]]|c_Guilds
+Story  [[[DONE]]]|c_Story
+Gold_Shop  [[[DONE]]]|c_Gold_Shop
+Summon  [[[DONE]]]|c_Summon
+Upgrades [[[DONE ]]]|c_Upgrades
+Infinite_Tower|c_Infinite_Tower
+Unit_Index [[[DONE]]]|c_Unit_Index
+BossRush|c_BossRush
+Expeditions_Portal|c_Expeditions_Portal
+Outer_Main|c_Outer_Main
+Outer_Decor|c_Outer_Decor
+Summerprops|c_Summerprops

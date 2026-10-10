@@ -1,0 +1,16 @@
+Tournament [[DONE]]]|3097|-153|39.6|BigFormation_04_LOD2
+Leaderboards[[[DONE]]]|3274|-307|114.5|voidldrb
+Showcase [[[DONE]]]|2915|-515|26.5|showcase1
+Hub[[[DONE]]]|2979|-150|8.5|Plano.007
+Raid[[[DONE]]]|3183|-23|9.2|Terrain
+Guilds [[[DONE]]]|2791|-154|87.2|Plano.006
+Story  [[[DONE]]]|2793|12|197.7|TREE
+Gold_Shop  [[[DONE]]]|3047|-533|62.5|trunkkk2_low
+Summon  [[[DONE]]]|2917|-693|none|
+Upgrades [[[DONE ]]]|3225|-462|168.0|voidupg
+Infinite_Tower|2780|-306|16.3|Plano.025
+Unit_Index [[[DONE]]]|2981|-555|30.2|Unit Index mesh
+Expeditions|9973|70|none|
+BossRush|3142|-61|60.6|Gate
+Expeditions_Portal|3000|159|11.5|Arch1_low.002
+SPAWN|3000|0|2.6|floorspawn

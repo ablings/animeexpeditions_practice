@@ -1,0 +1,204 @@
+== sections (top-level children of Lobby, and of Lobby.Parts)
+  Invis                                    desc    202  Part 200
+  Lobby_Terrain                            desc     28  
+  Areas                                    desc   8546  MeshPart 2563, Part 551, UnionOperation 13
+  Outer                                    desc   2409  MeshPart 627, Part 122
+  NPCs                                     desc    392  MeshPart 26, Part 48
+  PartyViewBackground                      desc    188  MeshPart 25, Part 41
+  Collider                                 desc      0  
+  Main                                     desc   3573  MeshPart 1109, Part 209, UnionOperation 5
+  Summerprops                              desc    854  MeshPart 346
+  SpawnLocation                            desc      0  
+  ZoneVFX                                  desc      5  MeshPart 1, Part 1
+  ZoneVFX                                  desc      7  MeshPart 1, Part 1
+  ZoneVFX                                  desc      7  MeshPart 1, Part 1
+  ZoneVFX                                  desc      5  MeshPart 1, Part 1
+  Areas.Tournament [[DONE]]]               desc    218  MeshPart 89, Part 4
+  Areas.Leaderboards[[[DONE]]]             desc   1332  MeshPart 499, Part 60
+  Areas.Showcase [[[DONE]]]                desc     28  MeshPart 5
+  Areas.Hub[[[DONE]]]                      desc    195  MeshPart 60, Part 2
+  Areas.Raid[[[DONE]]]                     desc    917  MeshPart 283, Part 48
+  Areas.Guilds [[[DONE]]]                  desc   1370  MeshPart 501, Part 52, UnionOperation 6
+  Areas.Story  [[[DONE]]]                  desc    903  MeshPart 211, Part 77, UnionOperation 7
+  Areas.Gold_Shop  [[[DONE]]]              desc    109  MeshPart 39, Part 3
+  Areas.Summon  [[[DONE]]]                 desc    671  MeshPart 129, Part 79
+  Areas.Upgrades [[[DONE ]]]               desc   1528  MeshPart 410, Part 125
+  Areas.Infinite_Tower                     desc    569  MeshPart 173, Part 56
+  Areas.Unit_Index [[[DONE]]]              desc     12  MeshPart 2
+  Areas.Expeditions                        desc    131  MeshPart 38, Part 2
+  Areas.BossRush                           desc    109  MeshPart 7, Part 7
+  Areas.Expeditions_Portal                 desc    439  MeshPart 117, Part 36
+
+== base parts by class
+    4700  MeshPart
+    1175  Part
+      18  UnionOperation
+       1  SpawnLocation
+  volume share: Part 633339152, MeshPart 16820443778, Union 1754736179 (stud^3)
+  Neon parts 85, SurfaceAppearances 4007
+
+== materials (material / variant)
+    4622  Plastic
+     355  SmoothPlastic
+     163  Wood / Wood
+     146  Concrete / concrete
+      84  Neon
+      71  Brick / bricks2
+      64  Glass
+      47  ForceField
+      41  Metal / Metal1
+      36  Brick / Cobblestone0
+      31  Plastic / SummerSand
+      29  Brick / glass
+      27  CeramicTiles / tiles1
+      21  Brick / StoneBricks
+      21  Fabric
+      17  CeramicTiles / tiles3
+      16  CeramicTiles / tiles3gold
+      14  Concrete / concrete2
+      14  Metal
+      12  Asphalt
+      12  Limestone / grass stylized green
+       9  WoodPlanks / Woodguild
+       9  Plaster
+       9  Brick / bricks1
+       9  Snow / grass stylized grey
+       4  Plastic / tiles5
+       3  RoofShingles / Roof1
+       2  Asphalt / Floor tiles1
+       2  Grass / grass stylized
+       1  Neon / Cobblestone1
+
+== palette (colour + material, top 40)
+    4564  163,162,165 Plastic
+     142  163,162,165 SmoothPlastic
+      90  252,250,255 SmoothPlastic
+      70   87, 91, 99 Concrete
+      60  132,103, 85 Wood
+      55   17, 17, 17 SmoothPlastic
+      51  111, 95, 79 Wood
+      50   76, 64, 53 Wood
+      48  248,248,248 Plastic
+      41  163,162,165 Metal
+      28  220,211,192 Plastic
+      24  163,162,165 Brick
+      23  238,  0,255 SmoothPlastic
+      21  104,104,104 Concrete
+      19  163,162,165 Fabric
+      16  202,188,139 Glass
+      16  173,173,173 Brick
+      15   87, 86, 88 CeramicTiles
+      15  163,162,165 CeramicTiles
+      14   69, 73, 79 Concrete
+      14   33, 34, 59 Neon
+      14  103,104,107 Brick
+      14   95, 95, 95 Glass
+      13  234,184,146 SmoothPlastic
+      13  124,124,123 Brick
+      12  141,197,206 ForceField
+      12  138,255,237 Brick
+      12   28, 66, 84 SmoothPlastic
+      12    0,  0,  0 Neon
+      12  163,162,165 Asphalt
+      10  182,180,184 Brick
+       9  109,149,213 Limestone
+       9    0,  0,  0 Plaster
+       9  112, 32, 32 Concrete
+       9  188,153,105 Metal
+       8  137,136,139 Concrete
+       8  255,238,238 ForceField
+       8  145,146,147 Concrete
+       8  135,195,232 ForceField
+       8   97, 92, 94 Brick
+
+== meshes: unique ids and reuse (top 40; example placement)
+  unique mesh ids 600
+    453  e.g. Areas.Tournament [[DONE]]].Tournament_Decor.Foliage.Bushes.Bush_1
+    238  e.g. Areas.Raid[[[DONE]]].Grass sty
+    199  e.g. Areas.Tournament [[DONE]]].Tournament_Main.Terrain.BigFormation_03_LOD2
+    192  e.g. Areas.Tournament [[DONE]]].Tournament_Decor.Foliage.Flowers.Floor_Leafs_1
+     90  e.g. Areas.Leaderboards[[[DONE]]].Leaderboards_Decor.Foliage.Vines.2Vine_Stylized_mid
+     90  e.g. Areas.Summon  [[[DONE]]].Summon_Main.Misc.Summon_Clouds.Cloud_1
+     74  e.g. Areas.Tournament [[DONE]]].Tournament_Decor.Foliage.Stones.Pebble_1
+     60  e.g. Areas.Tournament [[DONE]]].Tournament_Decor.Foliage.Flowers.MultiFlower_4
+     58  e.g. Areas.Tournament [[DONE]]].Tournament_Decor.Foliage.Grass.Grass_2
+     55  e.g. Areas.Tournament [[DONE]]].Tournament_Decor.Foliage.Flowers.MultiFlower_1
+     52  e.g. Areas.Tournament [[DONE]]].Tournament_Decor.Foliage.Flowers.MultiFlower_3
+     51  e.g. Areas.Tournament [[DONE]]].Tournament_Decor.Structure.Torch_Pit
+     50  e.g. Areas.Guilds [[[DONE]]].Guilds_Decor.Foliage.Trees.Tree_Small_1.tg1
+     46  e.g. Areas.Tournament [[DONE]]].Tournament_Decor.Foliage.Stones.Pebbles_2
+     46  e.g. Areas.Leaderboards[[[DONE]]].Leaderboards_Main.Terrain.Cluster_07_LOD2
+     45  e.g. Areas.Tournament [[DONE]]].Tournament_Main.Terrain.BigFormation_02_LOD2
+     43  e.g. Areas.Leaderboards[[[DONE]]].Leaderboards_Decor.Structure.StreetLight_1
+     41  e.g. Areas.Tournament [[DONE]]].Tournament_Decor.Foliage.Flowers.MultiFlower_2
+     41  e.g. Areas.Leaderboards[[[DONE]]].Leaderboards_Main.Terrain.BigFormation_05_LOD2
+     41  e.g. Areas.Leaderboards[[[DONE]]].Leaderboards_Decor.Structure.Medium_05_LOD2
+     40  e.g. Areas.Leaderboards[[[DONE]]].Leaderboards_Decor.Foliage.Branches.Branch2
+     39  e.g. Areas.Leaderboards[[[DONE]]].Leaderboards_Main.Terrain.BigFormation_08_LOD2
+     36  e.g. Areas.Guilds [[[DONE]]].Guilds_Main.Structure.Fence.Plano.012
+     32  e.g. Areas.Leaderboards[[[DONE]]].Leaderboards_Main.Structure.Structure_Main.Prop1
+     30  e.g. Areas.Guilds [[[DONE]]].Guilds_Decor.Foliage.Trees.Tree_Small_1.tg1leaf1
+     28  e.g. Areas.Leaderboards[[[DONE]]].Leaderboards_Decor.Foliage.Branches.Branch1
+     28  e.g. Areas.Leaderboards[[[DONE]]].Leaderboards_Decor.Foliage.Vines.2Vine_Stylized_long
+     26  e.g. Areas.Leaderboards[[[DONE]]].Leaderboards_Main.Structure.Structure_Main.Arch3
+     24  e.g. Areas.Guilds [[[DONE]]].Guilds_Decor.Objects.Guild_Barrel
+     24  e.g. Areas.Leaderboards[[[DONE]]].Leaderboards_Decor.Foliage.3123312.ToWeld.Right Arm
+     24  e.g. Areas.Leaderboards[[[DONE]]].Leaderboards_Main.Structure.Structure_Main.bsl3
+     24  e.g. Areas.Leaderboards[[[DONE]]].Leaderboards_Decor.Foliage.3123312.ToWeld.Left Arm
+     22  e.g. Areas.Leaderboards[[[DONE]]].Leaderboards_Main.Trees.Tree_3.Meshes/Oaks_tree.007
+     22  e.g. Areas.Leaderboards[[[DONE]]].Leaderboards_Main.Trees.Tree_3.Meshes/Oaks_tree 3 top
+     22  e.g. Areas.Infinite_Tower.Planta stylized
+     21  e.g. Areas.Leaderboards[[[DONE]]].Leaderboards_Main.Structure.Structure_Main.Model.GCol2
+     21  e.g. Areas.Leaderboards[[[DONE]]].Leaderboards_Decor.Foliage.Vines.2Vine_Stylized_short
+     21  e.g. Summerprops.Sandpile2
+     21  e.g. Areas.Leaderboards[[[DONE]]].Leaderboards_Main.Terrain.Stone2
+     20  e.g. Areas.Guilds [[[DONE]]].Guilds_Decor.Objects.Crate_1
+
+== lights (grouped by settings)
+  total lights 321
+      10  PointLight   br 3.00 range 60 col 188,0,0 shadows false
+       8  PointLight   br 2.00 range 30 col 255,0,0 shadows false
+       6  PointLight   br 1.00 range 24 col 48,227,255 shadows false
+       6  PointLight   br 3.00 range 12 col 101,219,255 shadows false
+       6  PointLight   br 1.00 range 36 col 255,116,16 shadows false
+       6  PointLight   br 2.00 range 12 col 66,246,255 shadows false
+       6  PointLight   br 1.00 range 30 col 52,208,255 shadows false
+       6  PointLight   br 3.00 range 12 col 103,230,255 shadows false
+       5  PointLight   br 3.00 range 60 col 255,84,84 shadows false
+       5  PointLight   br 4.00 range 66 col 255,229,151 shadows false
+       4  PointLight   br 2.00 range 10 col 89,202,255 shadows false
+       4  PointLight   br 2.00 range 30 col 255,184,102 shadows false
+       4  PointLight   br 3.00 range 15 col 92,191,213 shadows false
+       4  PointLight   br 2.00 range 18 col 255,210,106 shadows false
+       3  PointLight   br 1.00 range 28 col 139,205,255 shadows false
+       3  PointLight   br 5.00 range 18 col 115,124,255 shadows false
+       3  PointLight   br 1.00 range 66 col 255,193,131 shadows false
+       3  PointLight   br 4.00 range 18 col 93,142,255 shadows false
+       3  PointLight   br 6.50 range 30 col 255,229,151 shadows false
+       2  PointLight   br 1.00 range 12 col 85,201,255 shadows false
+       2  PointLight   br 2.00 range 12 col 75,117,255 shadows false
+       2  PointLight   br 2.00 range 18 col 178,152,255 shadows false
+       2  PointLight   br 2.00 range 48 col 77,158,195 shadows false
+       2  PointLight   br 3.00 range 60 col 255,0,0 shadows false
+       2  PointLight   br 2.00 range 54 col 114,104,190 shadows false
+       2  PointLight   br 1.00 range 54 col 198,215,255 shadows false
+       2  PointLight   br 1.00 range 90 col 171,128,27 shadows false
+       2  PointLight   br 1.00 range 48 col 141,126,255 shadows false
+       2  PointLight   br 1.00 range 54 col 255,209,116 shadows false
+       2  PointLight   br 2.00 range 12 col 37,131,255 shadows false
+       2  PointLight   br 10.08 range 5 col 255,0,0 shadows false
+       2  PointLight   br 5.00 range 18 col 108,108,255 shadows false
+       2  PointLight   br 3.00 range 12 col 112,195,99 shadows false
+       2  PointLight   br 1.00 range 30 col 106,128,181 shadows false
+       2  PointLight   br 4.00 range 30 col 255,229,151 shadows false
+       2  PointLight   br 15.00 range 9 col 255,92,92 shadows false
+       2  PointLight   br 1.00 range 66 col 194,197,255 shadows false
+       2  PointLight   br 1.00 range 66 col 255,214,119 shadows false
+       2  PointLight   br 1.00 range 36 col 125,134,255 shadows false
+       2  PointLight   br 4.00 range 24 col 32,117,255 shadows false
+
+== images / effects
+    1145  Beam
+     920  ParticleEmitter
+     208  Decal
+      14  Texture
