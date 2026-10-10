@@ -11,5 +11,9 @@ new("BloomEffect", { Intensity = 1, Size = 56, Threshold = 2 })
 new("ColorCorrectionEffect", { Brightness = 0.01, Contrast = 0.12, Saturation = 0.14 })
 new("SunRaysEffect", { Intensity = 0.15, Spread = 0.7 })
 local sky = L:FindFirstChildOfClass("Sky") or Instance.new("Sky", L); sky.SunAngularSize = 10
+-- pass 4: own cloudy day skybox (tex/make_ae_tex4.py), uploaded via the file server
+local SKY = { Up = 96646909420645, Dn = 92885134578521, Ft = 122596386826953, Bk = 137792395717714, Lf = 128311943510983, Rt = 138049081543674 }
+for k, id in pairs(SKY) do sky["Skybox" .. k] = "rbxassetid://" .. id end
+sky.CelestialBodiesShown = true
 workspace.StreamingEnabled = false
 return "lighting matched"

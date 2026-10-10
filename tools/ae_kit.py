@@ -307,3 +307,257 @@ def build_channel_ramp():
 
 def build_all3():
     build_hood3(); build_channel_ramp()
+
+
+# ---------------------------------------------------------------- pass 4: quarter-and-mirror hero piece
+# Plaza frame (studs, Y-up, Roblox axes: -Z = north). Lower plaza floor y=0, terrace y=6 (8 steps x 0.75).
+# Stair foot at d=28, top at d=48, flights 34 wide. Corner piece authored for NE (x>0, z<0) in a diagonal frame:
+# w = distance out along the diagonal, u = lateral (toward +x+z). Mirrored in X and Z into one mesh per material.
+R2 = math.sqrt(2.0)
+def P(u, y, w):
+    return ((w + u) / R2, y, (u - w) / R2)
+
+def flat(o):
+    for p in o.data.polygons: p.use_smooth = False
+    for m in list(o.modifiers): o.modifiers.remove(m)
+    return o
+
+def extrude_plan(name, pts_xz, y0, y1):
+    """Plan polygon (x, z) extruded from y0 to y1: a solid block (flat shaded)."""
+    bm = bmesh.new(); vs = [bm.verts.new((x, y0, z)) for x, z in pts_xz]
+    f = bm.faces.new(vs)
+    r = bmesh.ops.extrude_face_region(bm, geom=[f])
+    for v in [e for e in r["geom"] if isinstance(e, bmesh.types.BMVert)]: v.co.y = y1
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+    return flat(mesh_obj(name, bm, False))
+
+def extrude_side(name, pts_dy, lat0, lat1):
+    """Side profile (d, y) extruded across lateral lat0..lat1 for a north flight (d along -Z, lateral along X)."""
+    bm = bmesh.new(); vs = [bm.verts.new((lat0, y, -d)) for d, y in pts_dy]
+    f = bm.faces.new(vs)
+    r = bmesh.ops.extrude_face_region(bm, geom=[f])
+    for v in [e for e in r["geom"] if isinstance(e, bmesh.types.BMVert)]: v.co.x = lat1
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+    return flat(mesh_obj(name, bm, False))
+
+def arch_outline(hw, hs, ry, nleg=3, narc=24):
+    pts = [(-hw, hs * i / nleg) for i in range(nleg)]
+    pts += [(hw * math.cos(math.pi - math.pi * k / narc), hs + ry * math.sin(math.pi - math.pi * k / narc)) for k in range(narc + 1)]
+    pts += [(hw, hs * (nleg - 1 - i) / nleg) for i in range(nleg)]
+    return pts
+
+def arch_band(name, outer, inner, w0, w1):
+    """Solid arch band between two outlines with the same point count, in the (u, y) plane, from depth w0 to w1."""
+    bm = bmesh.new()
+    Of = [bm.verts.new(P(u, y, w0)) for u, y in outer]; Ob = [bm.verts.new(P(u, y, w1)) for u, y in outer]
+    If = [bm.verts.new(P(u, y, w0)) for u, y in inner]; Ib = [bm.verts.new(P(u, y, w1)) for u, y in inner]
+    n = len(outer)
+    for i in range(n - 1):
+        bm.faces.new((Of[i], Of[i + 1], If[i + 1], If[i])); bm.faces.new((Ob[i], Ib[i], Ib[i + 1], Ob[i + 1]))
+        bm.faces.new((Of[i], Ob[i], Ob[i + 1], Of[i + 1])); bm.faces.new((If[i], If[i + 1], Ib[i + 1], Ib[i]))
+    for i in (0, n - 1):
+        bm.faces.new((Of[i], If[i], Ib[i], Ob[i]))
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+    return flat(mesh_obj(name, bm, False))
+
+def rbox_rot(name, sx, sy, sz, loc, rot_y, bevel=0.3, segs=2):
+    o = rbox(name, sx, sy, sz, bevel=bevel, segs=segs); o.location = loc; o.rotation_euler = (0, rot_y, 0); return o
+
+def lathe_at(name, prof, loc, seg=32, smooth=True):
+    o = lathe(name, prof, seg=seg, smooth=smooth); o.location = loc; return o
+
+def merge_objs(name, objs, mirror4=False, rot4=False):
+    """Bake objs (loc/rot) into one mesh; optionally add the X/Z mirrors (4 corners) or the 4 rotations about Y."""
+    src = bmesh.new()
+    for o in objs:
+        me = o.data.copy(); me.transform(o.matrix_basis); src.from_mesh(me); bpy.data.meshes.remove(me)
+    out = bmesh.new()
+    mats = [Matrix.Identity(4)]
+    if mirror4: mats = [Matrix.Diagonal((sx, 1, sz, 1)) for sx, sz in ((1, 1), (-1, 1), (1, -1), (-1, -1))]
+    if rot4: mats = [Matrix.Rotation(math.radians(90 * k), 4, 'Y') for k in range(4)]
+    tmp = bpy.data.meshes.new("tmp"); src.to_mesh(tmp)
+    for M in mats:
+        me = tmp.copy(); me.transform(M)
+        if M.determinant() < 0: me.flip_normals()
+        out.from_mesh(me); bpy.data.meshes.remove(me)
+    bpy.data.meshes.remove(tmp); src.free()
+    for o in objs: bpy.data.objects.remove(o, do_unlink=True)
+    # triangulate here: concave n-gons (hooked blades, notched block top) lose their caps in the Studio importer
+    bmesh.ops.triangulate(out, faces=out.faces[:], quad_method='BEAUTY', ngon_method='BEAUTY')
+    me = bpy.data.meshes.new(name); out.to_mesh(me); out.free()
+    ob = bpy.data.objects.new(name, me); coll().objects.link(ob)
+    return ob
+
+def lantern_parts(tag, loc, base_y):
+    """Lantern pavilion: stone pedestal, 6 gold columns round a cyan core, gold ring, ribbed blue dome, gold spike."""
+    x, _, z = loc; y = base_y; out = {"stone": [], "gold": [], "blue": [], "glass": []}
+    out["stone"].append(lathe_at(f"{tag}_ped", [(0, 0), (2.9, 0), (2.9, 0.6), (2.4, 0.9), (2.2, 4.0), (2.8, 4.4), (2.8, 5.0), (0, 5.0)], (x, y, z), 24))
+    out["gold"].append(lathe_at(f"{tag}_band", [(2.95, 4.3), (3.0, 4.3), (3.0, 5.1), (2.95, 5.1)], (x, y, z), 24))
+    out["glass"].append(lathe_at(f"{tag}_core", [(0, 5.0), (1.2, 5.3), (1.5, 7.8), (1.0, 10.0), (0, 10.4)], (x, y, z), 12))
+    for i in range(6):
+        a = 2 * math.pi * i / 6 + math.pi / 6
+        out["gold"].append(lathe_at(f"{tag}_col{i}", [(0, 5.0), (0.32, 5.0), (0.24, 5.4), (0.24, 10.2), (0.36, 10.5), (0, 10.5)], (x + 2.15 * math.cos(a), y, z + 2.15 * math.sin(a)), 8))
+    out["gold"].append(lathe_at(f"{tag}_ring", [(0, 10.4), (3.2, 10.4), (3.3, 10.8), (3.0, 11.2), (0, 11.2)], (x, y, z), 24))
+    # ribbed dome: radius modulated by 12 ribs
+    bm = bmesh.new(); seg, rows = 48, 10; ring = []
+    for j in range(rows + 1):
+        t = j / rows; ph = math.pi / 2 * t; r0 = 3.0 * math.cos(ph) * (1 + 0.12 * math.sin(math.pi * t)); yy = 11.2 + 3.9 * math.sin(ph)
+        row = []
+        for i in range(seg):
+            a = 2 * math.pi * i / seg; rr = r0 * (1 + 0.06 * abs(math.cos(6 * a)))
+            row.append(bm.verts.new((x + rr * math.cos(a), y + yy, z + rr * math.sin(a))))
+        ring.append(row)
+    for j in range(rows):
+        for i in range(seg):
+            bm.faces.new((ring[j][i], ring[j][(i + 1) % seg], ring[j + 1][(i + 1) % seg], ring[j + 1][i]))
+    bmesh.ops.remove_doubles(bm, verts=bm.verts, dist=1e-4); bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+    out["blue"].append(mesh_obj(f"{tag}_dome", bm, True, 70))
+    out["gold"].append(lathe_at(f"{tag}_spike", [(0, 14.9), (0.7, 15.0), (0.5, 15.6), (0.75, 16.0), (0.2, 17.4), (0, 18.2)], (x, y, z), 12))
+    return out
+
+def prism(name, quad, off):
+    """Quad (4 points, any plane) swept by an offset vector: a slab with a sloping edge (wings, kerbs)."""
+    bm = bmesh.new(); a = [bm.verts.new(p) for p in quad]; b = [bm.verts.new(Vector(p) + Vector(off)) for p in quad]
+    bm.faces.new(a); bm.faces.new(list(reversed(b)))
+    for i in range(4):
+        j = (i + 1) % 4; bm.faces.new((a[i], b[i], b[j], a[j]))
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+    return flat(mesh_obj(name, bm, False))
+
+def build_hero4():
+    """One corner of the plaza hero piece (arched fountain gate + corner block + pool + lanterns), mirrored to 4."""
+    clear_piece("K_Hero"); clear_piece("Q_")
+    G = {"stone": [], "darkStone": [], "gold": [], "goldLan": [], "blue": [], "glass": [], "water": []}
+    W0, W1 = 33.0, 36.0                       # arch band depth along the diagonal
+    outer = arch_outline(10.0, 6.0, 6.0); inner = arch_outline(5.5, 5.0, 3.5)
+    G["stone"].append(arch_band("Q_arch", outer, inner, W0, W1))
+    G["gold"].append(tube_along("Q_gArchO", [P(u, y, W0 - 0.05) for u, y in outer], 0.38))
+    G["gold"].append(tube_along("Q_gArchI", [P(u, y, W0 - 0.05) for u, y in inner], 0.34))
+    G["gold"].append(tube_along("Q_gArchB", [P(u, y, W1 + 0.05) for u, y in outer], 0.3))
+    # M crest: two horns with a 4-stud slot, gold outlined
+    for s in (-1, 1):
+        G["stone"].append(rbox_rot(f"Q_horn{s}", 4.0, 6.8, 3.0, P(s * 4.0, 13.1, (W0 + W1) / 2), math.radians(-45), 0.5, 2))
+        hu0, hu1 = s * 2.0, s * 6.0
+        G["gold"].append(tube_along(f"Q_gHorn{s}", [P(hu0, 11.6, W0 - 0.05), P(hu0, 16.5, W0 - 0.05), P(hu1, 16.5, W0 - 0.05), P(hu1, 10.6, W0 - 0.05)], 0.3))
+    # shoulder wings: thick sloping walls from the arch shoulders back along the flight sides to the stair tops
+    G["stone"].append(prism("Q_wingL", [(17, 6.0, -31.1), (17, 11.0, -31.1), (17, 7.2, -48), (17, 6.0, -48)], (2.6, 0, 0)))
+    G["stone"].append(prism("Q_wingR", [(31.1, 6.0, -17), (31.1, 11.0, -17), (48, 7.2, -17), (48, 6.0, -17)], (0, 0, -2.6)))
+    G["gold"].append(tube_along("Q_gWingL", [(16.95, 11.05, -31.1), (16.95, 7.25, -48)], 0.32))
+    G["gold"].append(tube_along("Q_gWingR", [(31.1, 11.05, -16.95), (48, 7.25, -16.95)], 0.32))
+    # niche: dark slate back wall, sides and top; gold shelf; glass fall
+    G["darkStone"].append(rbox_rot("Q_nicheBack", 11.2, 11.0, 0.8, P(0, 5.5, 39.4), math.radians(-45), 0.2, 1))
+    for s in (-1, 1):
+        G["darkStone"].append(rbox_rot(f"Q_nicheSide{s}", 0.8, 11.0, 4.0, P(s * 5.6, 5.5, 37.5), math.radians(-45), 0.2, 1))
+    G["darkStone"].append(rbox_rot("Q_nicheTop", 11.2, 0.8, 4.0, P(0, 10.6, 37.5), math.radians(-45), 0.2, 1))
+    G["gold"].append(rbox_rot("Q_shelf", 10.6, 0.6, 1.6, P(0, 6.2, 38.4), math.radians(-45), 0.2, 1))
+    G["glass"].append(rbox_rot("Q_fall", 3.0, 5.2, 0.5, P(0, 4.0, 38.6), math.radians(-45), 0.2, 1))
+    # corner block (terrace mass, y 0..6) with a notch behind the arch opening
+    poly = [P(-10, 0, 34), P(-5.5, 0, 34), P(-5.5, 0, 39), P(5.5, 0, 39), P(5.5, 0, 34), P(10, 0, 34), (62, 0, -17), (62, 0, -62), (17, 0, -62)]
+    G["stone"].append(extrude_plan("Q_block", [(p[0], p[2]) for p in poly], 0.0, 6.0))
+    G["gold"].append(tube_along("Q_gTopL", [(17, 6.05, -62), (17, 6.05, -31.1), P(-10, 6.05, 34), P(-5.5, 6.05, 34)], 0.3))
+    G["gold"].append(tube_along("Q_gTopR", [(62, 6.05, -17), (31.1, 6.05, -17), P(10, 6.05, 34), P(5.5, 6.05, 34)], 0.3))
+    G["gold"].append(tube_along("Q_gStrL", [(17.05, 0.9, -28), (17.05, 6.6, -48)], 0.28))
+    G["gold"].append(tube_along("Q_gStrR", [(28, 0.9, -17.05), (48, 6.6, -17.05)], 0.28))
+    # two-tier basin in front of the arch
+    bx, _, bz = P(0, 0, 27.5)
+    G["gold"].append(lathe_at("Q_basinFoot", [(0, 0), (6.3, 0), (6.3, 0.5), (0, 0.5)], (bx, 0, bz), 40, False))
+    G["stone"].append(lathe_at("Q_basin", [(0, 0.5), (5.6, 0.5), (5.6, 2.5), (4.9, 2.5), (4.9, 1.6), (3.0, 1.6), (3.0, 3.9), (2.5, 3.9), (2.5, 3.3), (0, 3.3)], (bx, 0, bz), 40))
+    G["gold"].append(tube_along("Q_gBasinA", [(bx + 5.25 * math.cos(2 * math.pi * i / 48), 2.55, bz + 5.25 * math.sin(2 * math.pi * i / 48)) for i in range(48)], 0.36, closed=True))
+    G["gold"].append(tube_along("Q_gBasinB", [(bx + 2.75 * math.cos(2 * math.pi * i / 32), 3.95, bz + 2.75 * math.sin(2 * math.pi * i / 32)) for i in range(32)], 0.28, closed=True))
+    G["water"].append(lathe_at("Q_wBasinA", [(0, 2.15), (4.95, 2.15)], (bx, 0, bz), 40))
+    G["water"].append(lathe_at("Q_wBasinB", [(0, 3.65), (2.55, 3.65)], (bx, 0, bz), 24))
+    G["glass"].append(lathe_at("Q_jet", [(0, 3.6), (0.7, 3.8), (0.45, 5.6), (0.0, 6.4)], (bx, 0, bz), 12))
+    # raised pool behind the arch: round rim, water 1 below the rim top, rock island
+    px, _, pz = P(0, 0, 56.6)
+    G["stone"].append(lathe_at("Q_poolRim", [(14.4, 6.0), (16.6, 6.0), (16.6, 7.6), (16.2, 8.0), (14.8, 8.0), (14.4, 7.6), (14.4, 6.0)], (px, 0, pz), 48))
+    G["gold"].append(tube_along("Q_gPool", [(px + 16.6 * math.cos(2 * math.pi * i / 64), 7.7, pz + 16.6 * math.sin(2 * math.pi * i / 64)) for i in range(64)], 0.3, closed=True))
+    G["water"].append(lathe_at("Q_wPool", [(0, 7.0), (14.45, 7.0)], (px, 0, pz), 48))
+    G["darkStone"].append(lathe_at("Q_rock", [(0, 6.0), (5.0, 6.0), (4.6, 7.8), (3.2, 9.2), (1.2, 9.8), (0, 9.8)], (px, 0, pz), 9, False))
+    for s in (-1, 1):
+        L = lantern_parts(f"Q_lan{s}", P(s * 14.0, 0, 52.0), 6.0)
+        for k, v in L.items(): G["goldLan" if k == "gold" else k] += v  # split: one gold mesh would pass 20k tris
+    out = []
+    for k, objs in G.items():
+        if objs: out.append(merge_objs(f"K_Hero_{k}", objs, mirror4=True).name)
+    return out
+
+def build_stairs4():
+    """Four 8-step flights (foot d=28, top d=48, 34 wide) with a sunken blue ramp runner, gold kerbs and Y chevron."""
+    clear_piece("K_Stairs"); clear_piece("Q_")
+    G = {"stone": [], "blue": [], "gold": [], "glass": []}
+    rise, tread, d0, n = 0.75, 2.5, 28.0, 8
+    for i in range(n):
+        h = rise * (i + 1); dc = d0 + tread * i + tread / 2
+        widths = [4.5, 4.5, 4.4] if i % 2 == 0 else [2.25, 4.5, 4.5, 2.15]
+        for s in (-1, 1):
+            x = 4.1
+            for wdt in widths:
+                o = rbox(f"Q_st{i}_{s}_{x:.1f}", wdt - 0.08, h, tread - 0.05, bevel=0.18, segs=1, loc=(s * (x + wdt / 2), h / 2, -dc))
+                G["stone"].append(flat(o)); x += wdt
+    ramp = lambda d: 0.4 + (d - d0) * (6.0 - 0.4) / (tread * n)
+    G["blue"].append(extrude_side("Q_ramp", [(d0, 0), (d0, ramp(d0)), (d0 + 20, ramp(d0 + 20)), (d0 + 20, 0)], -3.5, 3.5))
+    for s in (-1, 1):
+        G["gold"].append(extrude_side(f"Q_kerb{s}", [(d0 - 0.3, 0), (d0 - 0.3, 0.75), (d0 + 20, 6.3), (d0 + 20, 0)], s * 3.5, s * 4.1))
+    yy = lambda d: ramp(d) + 0.04
+    G["gold"].append(tube_along("Q_Ystem", [(0, yy(d), -d) for d in (31.5, 40.0)], 0.24))
+    for s in (-1, 1):
+        G["gold"].append(tube_along(f"Q_Yarm{s}", [(0, yy(40.0), -40.0), (s * 2.7, yy(46.5), -46.5), (s * 2.7, yy(47.8), -47.8)], 0.24))
+        G["gold"].append(tube_along(f"Q_Yside{s}", [(s * 2.8, yy(d), -d) for d in (29.5, 44.0)], 0.16))
+    G["glass"].append(lathe_at("Q_gem", [(0, 0), (1.2, 0), (1.0, 0.18), (0, 0.22)], (0, ramp(29.6) + 0.04, -29.6), 16))
+    return [merge_objs(f"K_Stairs_{k}", objs, rot4=True).name for k, objs in G.items()]
+
+def blade_outline(a0, r0=2.3, r1=7.0, sweep=1.15, w=1.25, n=14):
+    L, R = [], []
+    for k in range(n + 1):
+        t = k / n; r = r0 + (r1 - r0) * t; th = a0 + sweep * t ** 1.5
+        hw = w * (1 - t) ** 0.7 + 0.04; d = hw / r
+        L.append((r * math.cos(th + d), r * math.sin(th + d))); R.append((r * math.cos(th - d), r * math.sin(th - d)))
+    tip = (r1 * 0.93 * math.cos(a0 + sweep + 0.32), r1 * 0.93 * math.sin(a0 + sweep + 0.32))  # hooked tip
+    return L + [tip] + list(reversed(R))
+
+def build_floor4():
+    """Floor inlays and medallion: centre diamond dais, slate bands, flush gold inlays, 8 hooked blades, gold disc."""
+    clear_piece("K_Medal"); clear_piece("Q_")
+    G = {"pale": [], "slate": [], "gold": [], "blue": [], "darkStone": []}
+    dia = lambda r: [(0, -r), (r, 0), (0, r), (-r, 0)]
+    G["pale"].append(extrude_plan("Q_dais", dia(20.0), 0.0, 0.3))
+    for k in range(4):
+        a, b = dia(20.0)[k], dia(20.0)[(k + 1) % 4]; A, B = dia(23.5)[k], dia(23.5)[(k + 1) % 4]
+        G["slate"].append(extrude_plan(f"Q_band{k}", [a, b, B, A], 0.0, 0.04))
+    for r, nm in ((20.0, "a"), (23.5, "b"), (17.6, "c")):
+        G["gold"].append(tube_along(f"Q_gDia{nm}", [(x, 0.3 if r < 21 else 0.04, z) for x, z in dia(r)], 0.22 if r != 17.6 else 0.15, closed=True))
+    G["pale"].append(lathe_at("Q_medal", [(0, 0.3), (7.6, 0.3), (7.6, 0.42), (0, 0.42)], (0, 0, 0), 64, False))
+    G["gold"].append(tube_along("Q_gMedal", [(7.6 * math.cos(2 * math.pi * i / 64), 0.42, 7.6 * math.sin(2 * math.pi * i / 64)) for i in range(64)], 0.3, closed=True))
+    for i in range(8):
+        o = extrude_outline(f"Q_blade{i}", blade_outline(2 * math.pi * i / 8), 0.1, bevel=0.0)
+        o.rotation_euler = (math.radians(90), 0, 0); o.location = (0, 0.46, 0); flat(o)
+        o.data.flip_normals()  # the hooked outline comes out inside-out from extrude_outline: checked top faces pointed down
+        G["darkStone"].append(o)
+        a = 2 * math.pi * (i + 0.5) / 8
+        G["gold"].append(lathe_at(f"Q_stud{i}", [(0, 0.42), (0.45, 0.42), (0.3, 0.62), (0, 0.66)], (6.6 * math.cos(a), 0, 6.6 * math.sin(a)), 10))
+    G["gold"].append(lathe_at("Q_disc", [(0, 0.42), (2.0, 0.42), (2.0, 0.66), (1.8, 0.74), (0, 0.74)], (0, 0, 0), 32))
+    G["darkStone"].append(lathe_at("Q_discRing", [(0.9, 0.745), (1.25, 0.745)], (0, 0, 0), 24, False))
+    # per arm (north authored, rotated x4): flush runner inlay from the dais tip to the stair foot, slate foot band
+    G["blue"].append(extrude_plan("Q_run", [(-3.5, -19.5), (3.5, -19.5), (3.5, -28.2), (-3.5, -28.2)], 0.0, 0.06))
+    for s in (-1, 1):
+        G["gold"].append(extrude_plan(f"Q_runK{s}", [(s * 3.5, -19.0), (s * 4.0, -19.0), (s * 4.0, -28.2), (s * 3.5, -28.2)], 0.0, 0.08))
+    G["slate"].append(extrude_plan("Q_foot", [(-17, -25.0), (17, -25.0), (17, -28.0), (-17, -28.0)], 0.0, 0.04))
+    G["gold"].append(tube_along("Q_gFoot", [(-17, 0.04, -24.9), (-4.0, 0.04, -24.9)], 0.18)); G["gold"].append(tube_along("Q_gFoot2", [(4.0, 0.04, -24.9), (17, 0.04, -24.9)], 0.18))
+    out = []
+    for k, objs in G.items():
+        arm = [o for o in objs if o.name.startswith(("Q_run", "Q_foot", "Q_gFoot"))]
+        one = [o for o in objs if o not in arm]
+        parts = []
+        if one: parts.append(merge_objs(f"Q1_{k}", one))
+        if arm: parts.append(merge_objs(f"Q4_{k}", arm, rot4=True))
+        out.append(merge_objs(f"K_Medal_{k}", parts).name)
+    return out
+
+def build_bollard4():
+    clear_piece("K_Bollard")
+    flat(rbox("K_Bollard_white", 2.5, 1.2, 2.5, bevel=0.2, segs=2, loc=(0, 0.6, 0)))
+    lathe("K_Bollard_gold", [(0, 1.2), (0.85, 1.2), (0.85, 1.4)] + [(0.8 * math.cos(t), 1.4 + 0.9 * math.sin(t)) for t in [math.pi / 2 * k / 6 for k in range(1, 7)]] + [(0, 2.6)], seg=16)
+
+def build_all4():
+    names = build_hero4() + build_stairs4() + build_floor4(); build_bollard4()
+    return names
