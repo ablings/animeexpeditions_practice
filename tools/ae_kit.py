@@ -2114,3 +2114,120 @@ def export_r9(path):
     bpy.ops.export_scene.fbx(filepath=path, use_selection=True, object_types={'MESH'}, apply_unit_scale=True,
                              mesh_smooth_type='FACE', use_mesh_modifiers=True, axis_forward='-Z', axis_up='Y')
     return [o.name for o in sel]
+
+# ---------------------------------------------------------------- pass 10 (verify7_plaza.md, round 7 against the live
+# reference): mostly Studio-side value corrections; the only new meshes are the hero with the smaller, recessed basin and
+# the Expeditions triptych gate.
+def build_hero10():
+    """Corner hero piece, pass 10 (round-7 item 4): build_hero6 with the basin 15% smaller and 3.5 further back (centre
+    w 33.1) so its back rim sits under the arch mouth, and WITHOUT the upper tier (pale 6-wide drum + gold bars), which
+    was the oversized drum; the small 4 x 1.8 slatted drum is built from Parts in Studio. The curved sheet and splash
+    are dropped too (hidden in Studio since pass 9)."""
+    clear_piece("K_Hero"); clear_piece("Q_")
+    G = {"stone": [], "rib": [], "darkStone": [], "gold": [], "goldBas": [], "goldLan": [], "blue": [], "glass": [], "core": [],
+         "water": [], "sheet": [], "foam": [], "vault": []}
+    W0, W1 = 33.0, 39.5
+    outer = arch_outline(10.0, 5.0, 5.0); in1 = arch_outline(7.6, 4.2, 4.0); in2 = arch_outline(7.0, 4.0, 3.6); in3 = arch_outline(6.5, 3.8, 3.2)
+    G["stone"].append(arch_band("Q_arch", outer, in1, W0, W1))
+    G["rib"].append(arch_band("Q_rib1", in1, in2, W0 + 0.7, W1))
+    G["darkStone"].append(arch_band("Q_rib2", in2, in3, W0 + 1.4, W1))
+    G["gold"].append(ribbon_uy("Q_gArchO", outer, 0.55, W0))
+    G["gold"].append(ribbon_uy("Q_gArchI", arch_outline(8.25, 4.35, 4.6), 0.45, W0))
+    G["gold"].append(ribbon_uy("Q_gArchR", in1, 0.3, W0 + 0.7))
+    # crown crest: sloping shoulders from the band, two 3-wide arms with a chamfered (hooked) outer top corner, a 4.8-wide window
+    C = [(-8.0, 7.9), (8.0, 7.9), (5.7, 10.7), (5.7, 12.5), (4.8, 13.5), (2.4, 13.5), (2.4, 9.4), (-2.4, 9.4), (-2.4, 13.5), (-4.8, 13.5), (-5.7, 12.5), (-5.7, 10.7)]
+    G["stone"].append(extrude_uy("Q_crest", C, W0 + 0.3, W0 + 3.8))
+    G["gold"].append(ribbon_uy("Q_gCrest", C[1:] + C[:1], 0.42, W0 + 0.3, closed=True))
+    G["vault"].append(extrude_uy("Q_crestWin", [(-2.4, 9.4), (2.4, 9.4), (2.4, 9.9), (-2.4, 9.9)], W0 + 0.6, W0 + 3.5))
+    # shoulder wings (as pass 5) with flat gold top strips
+    G["stone"].append(prism("Q_wingL", [(17, 6.0, -31.1), (17, 10.0, -31.1), (17, 7.2, -48), (17, 6.0, -48)], (2.6, 0, 0)))
+    G["stone"].append(prism("Q_wingR", [(31.1, 6.0, -17), (31.1, 10.0, -17), (48, 7.2, -17), (48, 6.0, -17)], (0, 0, -2.6)))
+    G["gold"].append(prism("Q_gWingL", [(16.85, 9.45, -31.1), (16.85, 10.05, -31.1), (16.85, 7.25, -48), (16.85, 6.65, -48)], (0.2, 0, 0)))
+    G["gold"].append(prism("Q_gWingR", [(31.1, 9.45, -16.85), (31.1, 10.05, -16.85), (48, 7.25, -16.85), (48, 6.65, -16.85)], (0, 0, -0.2)))
+    # vault interior (lighter slate), gold shelf, curved water sheet from the shelf into the upper bowl
+    G["vault"].append(rbox_rot("Q_nicheBack", 13.4, 7.4, 0.8, P(0, 3.7, 40.2), math.radians(-45), 0.2, 1))
+    G["vault"].append(rbox_rot("Q_nicheTop", 13.4, 0.8, 1.6, P(0, 7.2, 40.0), math.radians(-45), 0.2, 1))
+    G["gold"].append(rbox_rot("Q_shelf", 12.6, 0.5, 1.4, P(0, 5.0, 39.3), math.radians(-45), 0.2, 1))
+    G["vault"].append(rbox_rot("Q_shelfBk", 12.6, 0.8, 0.8, P(0, 6.0, 39.6), math.radians(-45), 0.2, 1))
+    bw = 33.1; bx, _, bz = P(0, 0, bw)
+    # corner block (y 0..6), notch behind the vault
+    poly = [P(-10, 0, 34), P(-6.5, 0, 34), P(-6.5, 0, 41), P(6.5, 0, 41), P(6.5, 0, 34), P(10, 0, 34), (62, 0, -17), (62, 0, -62), (17, 0, -62)]
+    G["stone"].append(extrude_plan("Q_block", [(p[0], p[2]) for p in poly], 0.0, 6.0))
+    G["gold"].append(ribbon_xz("Q_gTopL", [(17.0, -62), (17.0, -31.1)], -0.5, 6.0))
+    G["gold"].append(ribbon_xz("Q_gTopR", [(62, -17.0), (31.1, -17.0)], -0.5, 6.0))
+    G["gold"].append(prism("Q_gStrL", [(16.85, 0.5, -28), (16.85, 1.1, -28), (16.85, 6.6, -48), (16.85, 6.0, -48)], (0.2, 0, 0)))
+    G["gold"].append(prism("Q_gStrR", [(28, 0.5, -16.85), (28, 1.1, -16.85), (48, 6.6, -16.85), (48, 6.0, -16.85)], (0, 0, -0.2)))
+    # single-tier basin, 0.85x, under the arch mouth (foot r 5.45, bowl r 4.75, water at 2.05)
+    G["goldBas"].append(lathe_at("Q_basinFoot", [(0, 0), (5.45, 0), (5.45, 0.45), (5.1, 0.6), (0, 0.6)], (bx, 0, bz), 40, False))
+    G["stone"].append(lathe_at("Q_basin", [(0, 0.6), (4.75, 0.6), (4.75, 2.4), (4.15, 2.4), (4.15, 1.6), (0, 1.6)], (bx, 0, bz), 40))
+    G["rib"].append(lathe_at("Q_basinBand", [(4.8, 0.9), (4.9, 1.0), (4.9, 1.6), (4.8, 1.7)], (bx, 0, bz), 40))
+    G["goldBas"].append(lathe_at("Q_gBasinA", [(4.15, 2.4), (4.8, 2.4), (4.8, 2.55), (4.15, 2.55)], (bx, 0, bz), 40, False))
+    G["water"].append(lathe_at("Q_wBasinA", [(0, 2.05), (4.15, 2.05)], (bx, 0, bz), 40))
+    # raised pool behind the gate (as pass 5)
+    px, _, pz = P(0, 0, 55.0)
+    G["stone"].append(lathe_at("Q_poolRim", [(12.4, 6.0), (14.5, 6.0), (14.5, 7.6), (14.1, 8.0), (12.8, 8.0), (12.4, 7.6), (12.4, 6.0)], (px, 0, pz), 48))
+    G["gold"].append(lathe_at("Q_gPool", [(13.0, 8.0), (13.9, 8.0), (13.9, 8.1), (13.0, 8.1)], (px, 0, pz), 64, False))
+    G["water"].append(lathe_at("Q_wPool", [(0, 7.0), (12.45, 7.0)], (px, 0, pz), 48))
+    G["darkStone"].append(lathe_at("Q_rock", [(0, 6.0), (4.5, 6.0), (4.1, 7.8), (2.8, 9.2), (1.0, 9.8), (0, 9.8)], (px, 0, pz), 9, False))
+    for s in (-1, 1):
+        L = lantern6(f"Q_lan{s}", P(s * 14.0, 0, 52.0), 4.0)   # 2 lower: the drum bottom sinks into the block
+        for k, v in L.items(): G["goldLan" if k == "gold" else k] += v
+    out = []
+    for k, objs in G.items():
+        if objs: out.append(merge_objs(f"K_Hero_{k}", objs, mirror4=True).name)
+    st = bpy.data.objects["K_Hero_stone"]
+    bm = bmesh.new(); bm.from_mesh(st.data); bm2 = bm.copy()
+    def top(f):
+        c = f.calc_center_median()
+        return f.normal.y > 0.9 and all(abs(v.co.y - 6.0) < 0.01 for v in f.verts) and abs(c.x) > 16.9 and abs(c.z) > 16.9
+    bmesh.ops.delete(bm, geom=[f for f in bm.faces if top(f)], context='FACES'); bm.to_mesh(st.data); bm.free()
+    bmesh.ops.delete(bm2, geom=[f for f in bm2.faces if not top(f)], context='FACES')
+    me = bpy.data.meshes.new("K_Hero_turf"); bm2.to_mesh(me); bm2.free(); ob = bpy.data.objects.new("K_Hero_turf", me); coll().objects.link(ob)
+    return out + ["K_Hero_turf"]
+
+def build_trip10():
+    """Expeditions triptych gate, faces -Z (x lateral, y up, z depth): a centre round arch 12 wide x 20 (opening 9 wide,
+    springing 11) and two side arches 8 wide x 14 (opening 5.2), teal frames 3 deep with gold tube trims on the front,
+    pale columns between them with urns, a dark-teal portal field with a 3-turn spiral (the swirl) and a pale statue on a
+    plinth in the centre opening, teal glass in the side openings, a gold filigree crest."""
+    clear_piece("K_Trip10_"); clear_piece("Q_")
+    G = {"teal": [], "gold": [], "pale": [], "portal": [], "swirl": [], "glass": []}
+    for cx, hw, ow, hs, top in ((0.0, 6.0, 4.5, 11.0, 20.0), (-10.5, 4.0, 2.6, 7.5, 14.0), (10.5, 4.0, 2.6, 7.5, 14.0)):
+        inner = arch_outline(ow, hs, ow)
+        G["teal"].append(bay(f"Q_bay{cx}", inner, hw, top, hs, -1.5, 1.5, 'z', (cx, 0, 0)))
+        G["gold"].append(tube_along(f"Q_gIn{cx}", [(cx + u * 1.04, y, -1.6) for u, y in inner], 0.22))
+        G["gold"].append(tube_along(f"Q_gTop{cx}", [(cx - hw, top - 0.3, -1.6), (cx + hw, top - 0.3, -1.6)], 0.25))
+        fld = extrude_outline(f"Q_fld{cx}", [(cx + u, y) for u, y in inner], 0.3, 0.0); fld.location = (0, 0, 0.6)
+        (G["portal"] if cx == 0 else G["glass"]).append(fld)
+    sw = [(0.21 * t * math.cos(t * 1.0), 10.5 + 0.21 * t * math.sin(t * 1.0) * 1.1, 0.35) for t in [k * 0.25 for k in range(1, 76)]]
+    G["swirl"].append(tube_along("Q_swirl", sw, 0.18))
+    G["pale"].append(lathe_at("Q_statueBase", [(0, 0), (1.6, 0), (1.6, 1.4), (1.2, 1.6), (0, 1.6)], (0, 0, -0.4), 12, False))
+    G["pale"].append(lathe_at("Q_statue", [(0, 1.6), (0.9, 1.6), (0.7, 4.0), (1.0, 5.6), (0.55, 6.6), (0.25, 6.8), (0.55, 7.2), (0.5, 7.8), (0, 8.0)], (0, 0, -0.4), 12))
+    for x in (-15.2, -6.4, 6.4, 15.2):
+        H = 15.0 if abs(x) < 10 else 11.0
+        G["pale"].append(lathe_at(f"Q_col{x}", [(0, 0), (1.2, 0), (1.2, 0.8), (0.85, 1.2), (0.8, H - 1.0), (1.2, H - 0.5), (1.3, H), (0, H)], (x, 0, -1.7), 12))
+        G["pale"].append(lathe_at(f"Q_urn{x}", [(0, H), (0.9, H + 0.2), (1.1, H + 1.0), (0.5, H + 1.8), (0, H + 2.6)], (x, 0, -1.7), 10))
+    crest = [(-4.0, 20.0), (-2.6, 21.8), (-1.2, 22.4), (0.0, 24.2), (1.2, 22.4), (2.6, 21.8), (4.0, 20.0)]
+    G["gold"].append(tube_along("Q_crest", [(u, y, -1.2) for u, y in crest], 0.3))
+    for s in (-1, 1):
+        G["gold"].append(tube_along(f"Q_curl{s}", [(s * (2.0 + 1.2 * math.cos(a)), 21.0 + 1.2 * math.sin(a), -1.6) for a in [k * 0.4 for k in range(16)]], 0.15))
+    return [merge_objs(f"K_Trip10_{k}", v).name for k, v in G.items() if v]
+
+def build_scale10():
+    clear_piece("K_Scale10_"); return rbox("K_Scale10_stone", 10.0, 10.0, 10.0, 0.01, 1)
+
+def build_all10():
+    build_scale10(); n = build_hero10(); n += build_trip10(); return n
+
+R10_PREFIXES = ("K_Scale10_", "K_Hero_", "K_Trip10_")
+
+def export_r10(path):
+    """Z-up + UVs (new pieces only), then export ONLY the pass-10 pieces plus the 10-stud cube; Studio merges them into Kit."""
+    to_zup_and_uv()
+    bpy.ops.object.select_all(action='DESELECT')
+    sel = [o for o in bpy.data.objects if o.type == 'MESH' and o.name.startswith(R10_PREFIXES)]
+    for o in sel: o.select_set(True)
+    bpy.context.view_layer.objects.active = sel[0]
+    bpy.ops.export_scene.fbx(filepath=path, use_selection=True, object_types={'MESH'}, apply_unit_scale=True,
+                             mesh_smooth_type='FACE', use_mesh_modifiers=True, axis_forward='-Z', axis_up='Y')
+    return [o.name for o in sel]
