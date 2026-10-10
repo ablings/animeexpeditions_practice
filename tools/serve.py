@@ -1,7 +1,7 @@
 """Standalone file server for this repo at http://127.0.0.1:8766/ (same API as blender_http_server.py, no Blender needed).
 GET /<path> serves a file; POST /<path> writes the body there. Localhost only. Run: python tools/serve.py"""
 import os, http.server
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__))); PORT = 8766
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__))); PORT = 8767
 class H(http.server.SimpleHTTPRequestHandler):
     def __init__(self, *a, **k): super().__init__(*a, directory=ROOT, **k)
     def do_POST(self):
