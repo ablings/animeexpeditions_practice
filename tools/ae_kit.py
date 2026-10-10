@@ -1297,3 +1297,276 @@ def export_r6(path):
     bpy.ops.export_scene.fbx(filepath=path, use_selection=True, object_types={'MESH'}, apply_unit_scale=True,
                              mesh_smooth_type='FACE', use_mesh_modifiers=True, axis_forward='-Z', axis_up='Y')
     return [o.name for o in sel]
+
+# ---------------------------------------------------------------- pass 7: slab islands, carved skull + Raid wings, clumps,
+# Story tree, clouds, umbrellas. Freestyle from the picture set and the round-4 review (verify4_plaza.md).
+def rect_like(inner, hw, top, cy):
+    """Outer outline for a wall bay round an arch opening: each inner point pushed straight out (legs) or radially from
+    (0, cy) onto the rectangle |u| <= hw, y <= top. Same point count as inner, so _band_xy can join them."""
+    out = []
+    for u, y in inner:
+        if y <= cy + 1e-6:
+            out.append((hw if u > 0 else -hw, y)); continue
+        du, dy = u, y - cy
+        t = min(hw / abs(du) if abs(du) > 1e-6 else 1e9, (top - cy) / dy if dy > 1e-6 else 1e9)
+        out.append((du * t, cy + dy * t))
+    return out
+
+def bay(name, inner, hw, top, cy, d0, d1, axis, loc):
+    o = _band_xy(name, rect_like(inner, hw, top, cy), inner, d0, d1, axis); o.location = loc; return o
+
+def ruin_tower(tag, cx, cy, cz, H=40.0, w=8.0, seed=0):
+    """Square ruined tower w x w x H: stacked 10-tall levels, every face a wall bay with a round-arched opening, a floor
+    slab per level; the top level is broken (faces missing, uneven tops). Returns the stone objects."""
+    rnd = random.Random(seed); hw = w / 2; t = 0.8; objs = []; nl = int(H // 10)
+    inner = arch_outline(hw * 0.5, 4.6, hw * 0.5, 2, 10)
+    for lv in range(nl):
+        y0 = cy + 10 * lv; top = lv == nl - 1
+        faces = [("z", -hw, -hw + t), ("z", hw - t, hw), ("x", -hw, -hw + t), ("x", hw - t, hw)]
+        for k, (ax, d0, d1) in enumerate(faces):
+            if top and rnd.random() < 0.4: continue
+            o = bay(f"Q_{tag}b{lv}{k}", inner, hw, 10.0 if not top else rnd.uniform(7.0, 9.5), 4.6, d0, d1, ax, (cx, y0, cz))
+            objs.append(o)
+        objs.append(rbox(f"Q_{tag}f{lv}", w + 0.8, 0.7, w + 0.8, 0.15, 1, (cx, y0 + 0.35, cz)))
+    return objs
+
+def build_island7(seed=71, R=60.0, k=0.48, towers=2):
+    """Floating island, pass 7: a WIDE irregular slab (120 x ~58 in plan, ~30 thick: about 4:1), grey faceted rock with a
+    jagged underside and hanging rock spikes, a thick grass cap with an overhanging lip, 4 clustered vine curtains,
+    ruined square towers 8 x 8 x 40 with arched openings, 3 wide (3.5) waterfall sheets."""
+    random.seed(seed); clear_piece(f"K_Isl7{seed}_"); clear_piece("Q_")
+    tag = f"Isl7{seed}"
+    ph = [random.uniform(0, 6.28) for _ in range(3)]; n = 40
+    fr = [1 + 0.16 * math.sin(2 * a + ph[0]) + 0.10 * math.sin(3 * a + ph[1]) + 0.07 * math.sin(5 * a + ph[2]) + random.uniform(-0.06, 0.06)
+          for a in [2 * math.pi * i / n for i in range(n)]]
+    rim = lambda i, s: (R * fr[i % n] * s * math.cos(2 * math.pi * i / n), R * k * fr[i % n] * s * math.sin(2 * math.pi * i / n))
+    lev = [(1.0, 0.0), (0.97, -3.0), (0.86, -8.0), (0.66, -14.0), (0.44, -20.0), (0.2, -26.0)]
+    bm = bmesh.new(); rings = []
+    for li, (s, y) in enumerate(lev):
+        ring = []
+        for i in range(n):
+            x, z = rim(i, s)
+            if li >= 2:
+                f = random.uniform(0.86, 1.12); x *= f; z *= f; yy = y + random.uniform(-3.0, 3.0)
+            else:
+                yy = y
+            ring.append(bm.verts.new((x, yy, z)))
+        rings.append(ring)
+    bot = bm.verts.new((0, -30.0, 0)); topc = bm.verts.new((0, 0.0, 0))
+    for li in range(len(rings) - 1):
+        for i in range(n):
+            j = (i + 1) % n; bm.faces.new((rings[li][i], rings[li][j], rings[li + 1][j], rings[li + 1][i]))
+    for i in range(n):
+        bm.faces.new((rings[-1][i], rings[-1][(i + 1) % n], bot)); bm.faces.new((rings[0][(i + 1) % n], rings[0][i], topc))
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+    rock = [flat(bm_obj("Q_rock", bm))]
+    for kk in range(7):  # hanging rock spikes
+        i = random.randrange(n); s = random.uniform(0.35, 0.75); x, z = rim(i, s); L = random.uniform(8, 18)
+        y0 = -8 - 20 * (1 - s)
+        rock.append(flat(lathe_at(f"Q_sp{kk}", [(0, y0 + 1), (random.uniform(3, 6), y0 + 1), (random.uniform(1.0, 2.0), y0 - L * 0.6), (0, y0 - L)], (x, 0, z), 5, False)))
+    # grass cap with overhanging lip
+    cap = bmesh.new(); ct = cap.verts.new((0, 2.8, 0)); R1, R2_, R3 = [], [], []
+    for i in range(n):
+        x, z = rim(i, 1.03); R1.append(cap.verts.new((x, 2.4, z)))
+        x, z = rim(i, 1.055); R2_.append(cap.verts.new((x, 0.6, z)))
+        x, z = rim(i, 1.02); R3.append(cap.verts.new((x, -1.4, z)))
+    for i in range(n):
+        j = (i + 1) % n
+        cap.faces.new((ct, R1[j], R1[i])); cap.faces.new((R1[i], R1[j], R2_[j], R2_[i])); cap.faces.new((R2_[i], R2_[j], R3[j], R3[i]))
+    bmesh.ops.recalc_face_normals(cap, faces=cap.faces)
+    vines = bmesh.new()
+    for c in range(4):  # 4 clustered curtains of 9 strips
+        i0 = random.randrange(n)
+        for m in range(9):
+            a = 2 * math.pi * (i0 + (m - 4) * 0.22) / n
+            f = 1 + 0.16 * math.sin(2 * a + ph[0]) + 0.10 * math.sin(3 * a + ph[1]) + 0.07 * math.sin(5 * a + ph[2])
+            cx, cz = R * f * 1.05 * math.cos(a), R * k * f * 1.05 * math.sin(a)
+            nrm = Vector((cx, 0, cz / (k * k))).normalized(); tg = Vector((-nrm.z, 0, nrm.x)) * 0.5
+            L = random.uniform(8, 22) * (1 - abs(m - 4) / 7); c0 = Vector((cx, -1.0, cz))
+            ds_quad(vines, [c0 - tg, c0 + tg, c0 + tg * 0.3 + Vector((0, -L, 0)) - nrm * 1.5, c0 - tg * 0.3 + Vector((0, -L, 0)) - nrm * 1.5])
+    stone = []
+    spots = [(R * 0.25, -R * k * 0.2, 40.0), (-R * 0.4, R * k * 0.15, 24.0)][:towers]
+    for ti, (x, z, h) in enumerate(spots):
+        stone += ruin_tower(f"t{ti}", x, 2.4, z, h, 8.0, seed + ti)
+    if towers > 1:  # broken arcade between the towers
+        inner = arch_outline(2.0, 5.0, 2.0, 2, 10)
+        x0, z0 = spots[0][0], spots[0][1]; x1, z1 = spots[1][0], spots[1][1]
+        for b in range(1, 4):
+            t = b / 4; o = bay(f"Q_arc{b}", inner, 3.2, 9.0, 5.0, -0.8, 0.8, 'z', (x0 + (x1 - x0) * t, 2.4, z0 + (z1 - z0) * t))
+            o.rotation_euler = (0, -math.atan2(z1 - z0, x1 - x0), 0); stone.append(o)
+    fall = []
+    for kk in range(3):
+        i = random.randrange(n); x, z = rim(i, 1.06); a = math.atan2(z, x)
+        fall.append(rbox_rot(f"Q_fall{kk}", 3.5, 70.0, 0.5, (x, -34.0, z), -a + math.pi / 2, 0.2, 1))
+    merge_objs(f"K_{tag}_rock", rock); bm_obj(f"K_{tag}_grass", cap); bm_obj(f"K_{tag}_vine", vines)
+    merge_objs(f"K_{tag}_white", stone); merge_objs(f"K_{tag}_fall", fall)
+
+def build_cloud7(tag="Cloud7", seed=101):
+    """Cumulus card: 11 overlapping soft spheres with a flat bottom, about 90 x 30 x 40."""
+    random.seed(seed); clear_piece(f"K_{tag}_")
+    bm = bmesh.new()
+    for i in range(11):
+        r = random.uniform(9, 20) * (1.25 if 3 <= i <= 6 else 1.0)
+        c = (random.uniform(-38, 38) * (0.5 if 3 <= i <= 6 else 1.0), r * random.uniform(0.2, 0.6), random.uniform(-12, 12))
+        ico(bm, c, r, 2, (1, 0.85, 1))
+    for v in bm.verts:
+        if v.co.y < 0: v.co.y = 0
+    bm_obj(f"K_{tag}_cloud", bm, smooth=True)
+
+def build_skull7():
+    """Carved stone skull about 10 wide x 13 tall (with jaw), facing -X: a deformed sphere with deep eye sockets, a
+    nose cavity and brow ridge, a jaw block with a row of teeth; the socket faces split out (dark) and two glowing
+    eye cores. Pedestal: a tapered carved plinth below it."""
+    clear_piece("K_Skull7_"); clear_piece("Q_")
+    bm = bmesh.new(); bmesh.ops.create_uvsphere(bm, u_segments=36, v_segments=24, radius=1.0)
+    eyes = [(0.4, -2.0), (0.4, 2.0)]; W = {}
+    bm.verts.index_update()
+    for v in bm.verts:
+        x, y, z = v.co.x * 5.0, v.co.y * 6.0, v.co.z * 4.8
+        if y < -1.0:
+            t = min(1.0, (-y - 1.0) / 5.0); z *= 1 - 0.28 * t; x = x * (1 - 0.15 * t)
+        if x < 0: x *= 0.86
+        w = 0.0
+        if x < -1.5:
+            for ey, ez in eyes:
+                d2 = ((y - ey) / 1.7) ** 2 + ((z - ez) / 1.5) ** 2; w = max(w, math.exp(-d2))
+            x += 2.9 * w
+            dn = math.exp(-(((y + 2.1) / 0.75) ** 2 + (z / 0.55) ** 2)); x += 1.4 * dn; w = max(w, dn)
+            x -= 0.45 * math.exp(-(((y - 2.2) / 0.6) ** 2)) * (1 - w)   # brow ridge
+        v.co = Vector((x, y, z)); W[v.index] = w
+    dark = bmesh.new(); dfaces = [f for f in bm.faces if sum(W[v.index] for v in f.verts) / len(f.verts) > 0.33]
+    for f in dfaces:
+        dark.faces.new([dark.verts.new(v.co) for v in f.verts])
+    bmesh.ops.delete(bm, geom=dfaces, context='FACES')
+    bone = [bm_obj("Q_head", bm, smooth=True)]
+    bone.append(rbox("Q_jaw", 6.0, 2.6, 7.0, 0.8, 2, (0.6, -6.0, 0)))
+    for i in range(8):
+        z = -2.45 + 0.7 * i
+        bone.append(rbox(f"Q_tu{i}", 0.7, 1.1, 0.6, 0.15, 1, (-2.75, -4.85, z)))
+        bone.append(rbox(f"Q_tl{i}", 0.7, 0.9, 0.6, 0.15, 1, (-2.55, -5.75, z)))
+    bone.append(prism("Q_ped", [(-3.4, -7.3, -4.4), (-3.4, -7.3, 4.4), (-4.6, -20.0, 5.6), (-4.6, -20.0, -5.6)], (8.6, 0, 0)))
+    eye = []
+    for k, (ey, ez) in enumerate(eyes):
+        eye.append(lathe_at(f"Q_eye{k}", [(0.85 * math.sin(t), -0.85 * math.cos(t)) for t in [math.pi * j / 6 for j in range(7)]], (-1.9, ey, ez), 10))
+    o = merge_objs("K_Skull7_bone", bone); bm_obj("K_Skull7_dark", dark); merge_objs("K_Skull7_eye", eye)
+    return o
+
+def build_rtower7():
+    """Raid side tower about 32 tall: round drum with a cornice, a slim upper drum with slit windows, an onion dome and
+    a needle spire with a ball."""
+    clear_piece("K_RTower7_"); clear_piece("Q_")
+    st = [lathe_at("Q_drum", [(0, 0), (4.2, 0), (4.2, 1.2), (3.6, 1.8), (3.6, 15.0), (4.4, 15.6), (4.4, 16.6), (0, 16.6)], (0, 0, 0), 16, False),
+          lathe_at("Q_up", [(0, 16.6), (2.9, 16.6), (2.9, 21.5), (3.3, 22.0), (0, 22.0)], (0, 0, 0), 16, False)]
+    dk = []
+    for i in range(6):
+        a = 2 * math.pi * i / 6
+        dk.append(rbox_rot(f"Q_slit{i}", 0.5, 3.0, 0.9, (2.85 * math.cos(a), 19.0, 2.85 * math.sin(a)), -a, 0.1, 1))
+        dk.append(rbox_rot(f"Q_win{i}", 0.5, 4.5, 1.3, (3.55 * math.cos(a + 0.5), 9.0, 3.55 * math.sin(a + 0.5)), -a - 0.5, 0.1, 1))
+    dome = [lathe_at("Q_dome", [(0, 22.0), (3.4, 22.0), (3.9, 23.6), (3.5, 25.4), (2.0, 27.0), (0.6, 28.4), (0.3, 30.4), (0, 31.6)], (0, 0, 0), 16)]
+    g = [lathe_at("Q_ball", [(0.5 * math.sin(t), 32.0 - 0.5 * math.cos(t)) for t in [math.pi * j / 6 for j in range(7)]], (0, 0, 0), 8),
+         lathe_at("Q_band", [(3.35, 21.9), (3.5, 22.0), (3.5, 22.3), (3.35, 22.4)], (0, 0, 0), 24, False)]
+    merge_objs("K_RTower7_stone", st); merge_objs("K_RTower7_darkStone", dk); merge_objs("K_RTower7_dome", dome); merge_objs("K_RTower7_gold", g)
+
+def build_arcade7():
+    """Arcade wing 20 long x 12 tall, facing -X: 4 bays with pointed openings, a dark back wall, a parapet with merlons."""
+    clear_piece("K_Arcade7_"); clear_piece("Q_")
+    st = []; inner = pointed_outline(1.9, 5.0, 8)
+    for b in range(4):
+        st.append(bay(f"Q_bay{b}", inner, 2.5, 10.0, 5.0, -1.0, 1.0, 'x', (0, 0, -7.5 + 5 * b)))
+    st.append(rbox("Q_cor", 2.6, 1.0, 20.6, 0.2, 1, (0, 10.5, 0)))
+    for m in range(7):
+        st.append(rbox(f"Q_mer{m}", 1.6, 1.6, 1.4, 0.15, 1, (0, 11.8, -9 + 3 * m)))
+    st.append(rbox("Q_plinth", 2.8, 0.8, 20.6, 0.15, 1, (0, 0.4, 0)))
+    dk = [rbox("Q_back", 0.6, 9.6, 20.0, 0.05, 1, (3.0, 4.8, 0))]
+    merge_objs("K_Arcade7_stone", st); merge_objs("K_Arcade7_darkStone", dk)
+
+def build_clump7(tag, seed, R=2.0, kind="grass", n=70):
+    """Mounded clump of radius R: a low leafy mound (about 0.6 tall) bristling with cards. kind 'grass' = thin upright
+    blades; 'bush' = broad leaf cards pointing up and out. Tinted per flight at placement."""
+    random.seed(seed); clear_piece(f"K_{tag}_")
+    A, B = bmesh.new(), bmesh.new()
+    ico(A, (0, -0.15, 0), R, 2, (1, 0.38, 1))
+    for i in range(n):
+        a = random.uniform(0, 2 * math.pi); r = R * 0.95 * math.sqrt(random.random())
+        y = 0.38 * R * math.sqrt(max(0.0, 1 - (r / R) ** 2)) - 0.25
+        b = Vector((r * math.cos(a), y, r * math.sin(a))); out = Vector((math.cos(a), 0, math.sin(a)))
+        if kind == "grass":
+            d = (Vector((0, 1, 0)) + out * (0.25 + 0.6 * r / R) + Vector((random.gauss(0, 0.15), 0, random.gauss(0, 0.15)))).normalized()
+            card(A, B, b, d, random.uniform(0.7, 1.3), 0.16, 0.35, random.uniform(-1, 1), (0.6, 0.8, 0.6, 0.35, 0.0))
+        else:
+            d = (Vector((0, 0.8, 0)) + out * (0.5 + 0.7 * r / R) + Vector((random.gauss(0, 0.3), random.gauss(0, 0.2), random.gauss(0, 0.3)))).normalized()
+            card(A, B, b, d, random.uniform(0.8, 1.3), 0.42, 0.2, random.uniform(-0.8, 0.8))
+    bm_obj(f"K_{tag}_leaf", A); bm_obj(f"K_{tag}_leafRim", B)
+
+def build_bigtree7(seed=91, H=46.0, R=40.0, cl=7.0):
+    """Story tree: a THICK tapering trunk (r 6.5 at the base) with a huge root flare and buttress roots, 5 twisting
+    branches that carry the canopy, and a wide canopy of leaf-card puffs (about 80 across)."""
+    random.seed(seed); clear_piece("K_BigTree7_"); clear_piece("Q_")
+    A, Bm = bmesh.new(), bmesh.new(); wood = []
+    tp = lambda t: Vector((3.0 * math.sin(2.2 * t), H * 0.62 * t, 2.0 * math.sin(1.4 * t + 0.5) - 1.0))
+    for k, (t0, t1, r) in enumerate(((0.0, 0.4, 6.5), (0.35, 0.75, 5.2), (0.7, 1.0, 4.0))):
+        pts = [tp(t0 + (t1 - t0) * i / 6) for i in range(7)]
+        if k == 0: pts[0] = pts[0] + Vector((0, -0.5, 0))
+        wood.append(tube_along(f"Q_tr{k}", [tuple(p) for p in pts], r))
+    wood.append(lathe_at("Q_flare", [(0, 0), (15.0, 0), (10.0, 1.6), (7.5, 5.0), (6.6, 10.0), (0, 10.2)], (0, -0.3, 0), 14, False))
+    for k in range(6):  # buttress roots
+        a = 2 * math.pi * k / 6 + 0.4
+        wood.append(tube_along(f"Q_root{k}", [(6.0 * math.cos(a), 7.0, 6.0 * math.sin(a)), (11.0 * math.cos(a + 0.15), 2.0, 11.0 * math.sin(a + 0.15)), (16.0 * math.cos(a + 0.3), -0.3, 16.0 * math.sin(a + 0.3))], 1.6))
+    ends = []
+    for b in range(5):
+        a = 2 * math.pi * b / 5 + random.uniform(-0.2, 0.2); p0 = tp(random.uniform(0.6, 0.95)); Rb = R * random.uniform(0.45, 0.6)
+        pts = [p0 + Vector((Rb * t * math.cos(a + 0.7 * t), H * 0.35 * t - 4 * t * t + 2 * math.sin(3 * t), Rb * t * math.sin(a + 0.7 * t))) for t in [i / 6 for i in range(7)]]
+        wood.append(tube_along(f"Q_bA{b}", [tuple(p) for p in pts[:4]], 2.6)); wood.append(tube_along(f"Q_bB{b}", [tuple(p) for p in pts[3:]], 1.6))
+        ends.append(pts[-1])
+    C = Vector((0, H, 0)); cents = list(ends)
+    for i in range(22):
+        y = random.uniform(-0.35, 0.8); rr = math.sqrt(max(0.0, 1 - y * y)); a = random.uniform(0, 2 * math.pi)
+        cents.append(C + Vector((R * 0.85 * rr * math.cos(a), R * 0.28 * y, R * 0.85 * rr * math.sin(a))))
+    for c in cents:
+        ico(A, c, cl * 0.95, 1, (1, 0.7, 1))
+        out = (c - C); out = out.normalized() if out.length > 0.1 else Vector((0, 1, 0))
+        for j in range(22):
+            rd = Vector((random.gauss(0, 1), random.gauss(0, 1), random.gauss(0, 1))).normalized()
+            d = (out * 0.7 + rd + Vector((0, 0.3, 0))).normalized(); L = cl * random.uniform(0.7, 1.1)
+            card(A, Bm, c + d * cl * 0.55, d, L, L * 0.38, 0.15, random.uniform(-0.8, 0.8))
+    merge_objs("K_BigTree7_wood", wood); bm_obj("K_BigTree7_leaf", A); bm_obj("K_BigTree7_leafRim", Bm)
+
+def build_crown7():
+    """Gold crown about 7 across x 5 tall for the Story sign: a band with 5 points tipped by balls, and a jewel."""
+    clear_piece("K_Crown7_"); clear_piece("Q_")
+    g = [lathe("Q_band", [(3.0, 0), (3.4, 0), (3.6, 1.6), (3.2, 1.6), (3.0, 0)], seg=30, smooth=True)]
+    for k in range(5):
+        a = 2 * math.pi * k / 5; x, z = 3.3 * math.cos(a), 3.3 * math.sin(a)
+        g.append(lathe_at(f"Q_pt{k}", [(0, 1.4), (1.0, 1.4), (0.2, 4.2), (0, 4.4)], (x, 0, z), 6, False))
+        g.append(lathe_at(f"Q_bl{k}", [(0.45 * math.sin(t), 4.6 - 0.45 * math.cos(t)) for t in [math.pi * j / 6 for j in range(7)]], (x, 0, z), 8))
+    gem = [lathe_at("Q_gem", [(0, -0.9), (0.8, 0), (0, 0.9)], (-3.7, 0.8, 0), 6, False)]
+    merge_objs("K_Crown7_gold", g); merge_objs("K_Crown7_glass", gem)
+
+def build_umbrella7(tag="Umbrella7"):
+    """Market umbrella 7 across x 7.5 tall: 8-panel canopy, pole, round stall table."""
+    clear_piece(f"K_{tag}_"); clear_piece("Q_")
+    can = [flat(lathe("Q_can", [(0, 7.2), (1.2, 6.9), (3.5, 5.8), (3.6, 5.5), (0.0, 5.55)], seg=8, smooth=False))]
+    pole = [lathe_at("Q_pole", [(0, 0), (0.15, 0), (0.15, 7.4), (0, 7.5)], (0, 0, 0), 6, False),
+            lathe_at("Q_tab", [(0, 2.6), (2.0, 2.6), (2.0, 2.9), (0, 2.9)], (0, 0, 0), 16, False)]
+    merge_objs(f"K_{tag}_canopy", can); merge_objs(f"K_{tag}_white", pole)
+
+def build_all7():
+    for s in (71, 72, 73): build_island7(s, R=60.0 if s != 73 else 48.0, towers=2 if s != 72 else 1)
+    build_cloud7("Cloud7", 101); build_cloud7("Cloud7B", 102)
+    build_skull7(); build_rtower7(); build_arcade7()
+    build_clump7("ClumpG", 111, 2.0, "grass", 80); build_clump7("ClumpB", 112, 2.0, "bush", 55)
+    build_bigtree7(); build_crown7(); build_umbrella7()
+
+R7_PREFIXES = R6_PREFIXES + ("K_Isl771_", "K_Isl772_", "K_Isl773_", "K_Cloud7_", "K_Cloud7B_", "K_Skull7_", "K_RTower7_", "K_Arcade7_",
+                             "K_ClumpG_", "K_ClumpB_", "K_BigTree7_", "K_Crown7_", "K_Umbrella7_")
+
+def export_r7(path):
+    """Z-up + UVs (new pieces only; the pass-6 pieces already carry the zup flag), then the export call used since r3."""
+    to_zup_and_uv()
+    bpy.ops.object.select_all(action='DESELECT')
+    sel = [o for o in bpy.data.objects if o.type == 'MESH' and o.name.startswith(R7_PREFIXES)]
+    for o in sel: o.select_set(True)
+    bpy.context.view_layer.objects.active = sel[0]
+    bpy.ops.export_scene.fbx(filepath=path, use_selection=True, object_types={'MESH'}, apply_unit_scale=True,
+                             mesh_smooth_type='FACE', use_mesh_modifiers=True, axis_forward='-Z', axis_up='Y')
+    return [o.name for o in sel]
