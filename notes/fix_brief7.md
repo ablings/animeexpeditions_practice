@@ -55,3 +55,9 @@ water discs, lanterns, plants.
 - Verify with captures; time-box ~100 minutes. Prioritise 1-4 and 7.
 - Report `notes/fix7_plaza.md`: what you built and how (method), what you measured from pictures, and **lessons**:
   anything about freestyle modelling that a builder should know next time (these go into the workflow vault).
+
+## Shadow PC click positions (single 1920x1080 screen, Studio maximised, frame 1456x819)
+- Home > Import 3D button: (570, 80). Open dialog File name box: (350, 378), Open: (598, 401).
+- Import Preview (as in the RIVALS sessions on this PC): Insert Using Scene Position (871, 370), Anchored (871, 457), Import (967, 646). Both ticks reset each time; zoom to confirm.
+- File menu: (12, 25); Save to File: (40, 211).
+- Practice studio_id `aa9c5bb9-9006-4f4c-9b3b-feba1f0b256d`; paths: `C:/Users/Shadow/...` instead of `C:/Users/aroki/...`.

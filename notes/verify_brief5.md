@@ -30,3 +30,8 @@ Round 4 scored 6.00 (notes/verify4_plaza.md); pass 7 (notes/fix7_plaza.md, kit a
 with ruins and wider waterfalls, a carved-skull Raid castle with spires, darker stairs with pale nosings, mounded grass
 clumps, a cream-and-gold Summon facade, bigger Expeditions arch with rock shards, Story ring with crown and thicker tree.
 Compare each camera with its round-4 score.
+
+## Shadow PC (2026-10-10 afternoon)
+- Paths: replace `C:/Users/aroki` with `C:/Users/Shadow` everywhere above.
+- PRACTICE studio_id on the Shadow PC: `aa9c5bb9-9006-4f4c-9b3b-feba1f0b256d`. REFERENCE studio_id: fill in after the reference place is opened (`list_roblox_studios`).
+- `out/` is gitignored: `out/refset/ref_<cam>.png` only exists on the main PC unless copied over.
