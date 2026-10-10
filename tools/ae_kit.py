@@ -184,3 +184,126 @@ def build_all():
     for f in (build_hood, build_fountain, build_pavilion, build_step, build_channel, build_medallion, build_bollard, build_plinth, build_puff_tree, build_palm):
         f()
     return sorted(o.name for o in bpy.data.objects if o.name.startswith("K_"))
+
+# ---------------------------------------------------------------- pass 2
+def build_hood2():
+    """Upright horseshoe arch over the fountain: tall crescent wall (stone outside, dark inner face) plus a canopy
+    leaning over the fountain, gold rounded trim on the front edges and canopy lip, two horn knobs at the front top."""
+    clear_piece("K_Hood")
+    a0, a1 = math.radians(-15), math.radians(195)
+    lathe("K_Hood_stone", [(12.6, 0.0), (13.6, 0.0), (13.6, 19.0), (13.0, 20.2)], seg=32, angle=a1 - a0, start=a0)
+    lathe("K_Hood_darkIn", [(12.6, 0.0), (12.6, 19.0)], seg=32, angle=a1 - a0, start=a0)
+    lathe("K_Hood_stoneCanopy", [(13.0, 20.2), (13.6, 21.6), (7.5, 21.0), (6.8, 19.6), (12.6, 19.0)], seg=32, angle=a1 - a0, start=a0)
+    lathe("K_Hood_darkUnder", [(6.8, 19.55), (12.6, 18.95)], seg=32, angle=a1 - a0, start=a0)
+    N = 48
+    tube_along("K_Hood_goldLip", [(6.9 * math.cos(a0 + (a1 - a0) * i / N), 19.7, 6.9 * math.sin(a0 + (a1 - a0) * i / N)) for i in range(N + 1)], 0.5)
+    tube_along("K_Hood_goldTop", [(13.6 * math.cos(a0 + (a1 - a0) * i / N), 21.7, 13.6 * math.sin(a0 + (a1 - a0) * i / N)) for i in range(N + 1)], 0.45)
+    for k, a in enumerate((a0, a1)):
+        ca, sa = math.cos(a), math.sin(a)
+        tube_along(f"K_Hood_goldEdge{k}", [(12.6 * ca, 0.3, 12.6 * sa), (12.6 * ca, 19.0, 12.6 * sa), (6.9 * ca, 19.7, 6.9 * sa)], 0.5)
+        tube_along(f"K_Hood_goldEdgeO{k}", [(13.6 * ca, 0.3, 13.6 * sa), (13.6 * ca, 21.6, 13.6 * sa)], 0.5)
+        rbox(f"K_Hood_stoneHorn{k}", 2.4, 4.0, 2.4, bevel=0.9, loc=(13.1 * ca, 23.2, 13.1 * sa))
+    lathe("K_Hood_stoneBase", [(0, 0.0), (15.0, 0.0), (15.0, 1.0), (0, 1.0)], seg=36)
+    tube_along("K_Hood_goldBase", [(15.0 * math.cos(2 * math.pi * i / 64), 1.0, 15.0 * math.sin(2 * math.pi * i / 64)) for i in range(64)], 0.4, closed=True)
+
+def build_bush(seed=3, tag="blueBush", n=9, r=1.6):
+    """Stylised clump: overlapping low-poly blobs, flattened, for scatter planting."""
+    import random; random.seed(seed)
+    clear_piece(f"K_{tag}")
+    for i in range(n):
+        bm = bmesh.new(); bmesh.ops.create_icosphere(bm, subdivisions=1, radius=r * random.uniform(0.7, 1.2))
+        for v in bm.verts: v.co.y *= 0.7; v.co *= 1 + random.uniform(-0.15, 0.15)
+        o = mesh_obj(f"K_{tag}_leaf{i}", bm, True, 80)
+        a = random.uniform(0, 2 * math.pi); d = random.uniform(0, r * 1.6)
+        o.location = (d * math.cos(a), r * 0.6 + random.uniform(0, r * 0.5), d * math.sin(a))
+
+def build_grass(seed=4):
+    import random; random.seed(seed)
+    clear_piece("K_Grass")
+    bm = bmesh.new()
+    for i in range(14):
+        a = random.uniform(0, 2 * math.pi); d = random.uniform(0, 1.2); h = random.uniform(1.2, 2.4)
+        b = Vector((d * math.cos(a), 0, d * math.sin(a))); side = Vector((-math.sin(a), 0, math.cos(a))) * 0.18
+        tip = b + Vector((0.5 * math.cos(a), h, 0.5 * math.sin(a)))
+        vs = [bm.verts.new(b - side), bm.verts.new(b + side), bm.verts.new(tip)]
+        bm.faces.new(vs); bm.faces.new(list(reversed([bm.verts.new(v.co) for v in vs])))
+    mesh_obj("K_Grass_leaf", bm, False)
+
+def build_all2():
+    build_hood2(); build_bush(3, "BushBlue"); build_bush(5, "BushRed", 8, 1.4); build_grass()
+    return sorted(o.name for o in bpy.data.objects if o.name.startswith("K_"))
+
+def to_zup_and_uv():
+    """Y-up authored pieces -> Blender Z-up (rotate data once), then a cube-projection UV on every piece."""
+    R = Matrix.Rotation(math.radians(90), 4, 'X')
+    for o in bpy.data.objects:
+        if o.name.startswith("K_") and o.type == 'MESH' and not o.get("zup"):
+            o.data.transform(R); o.location = R @ o.location; o["zup"] = 1
+    for o in bpy.data.objects:
+        if o.name.startswith("K_") and o.type == 'MESH' and not o.data.uv_layers:
+            bm = bmesh.new(); bm.from_mesh(o.data); uv = bm.loops.layers.uv.new("UVMap")
+            for f in bm.faces:
+                n = f.normal; ax = max(range(3), key=lambda i: abs(n[i]))
+                for l in f.loops:
+                    c = l.vert.co; u, v = [(c.y, c.z), (c.x, c.z), (c.x, c.y)][ax]
+                    l[uv].uv = (u / 8.0, v / 8.0)
+            bm.to_mesh(o.data); bm.free()
+
+# ---------------------------------------------------------------- pass 3
+def lathe_solid(name, prof, seg, angle, start):
+    """Closed-profile lathe with end caps: a solid that renders from every side (Roblox culls back faces)."""
+    o = lathe(name, prof + [prof[0]], seg=seg, angle=angle, start=start)
+    bm = bmesh.new(); bm.from_mesh(o.data)
+    ends = []
+    for i in (0, seg):  # cap the two ends of a partial revolve
+        a = start + angle * i / seg
+        vs = [v for v in bm.verts if abs(math.atan2(v.co.z, v.co.x) - math.atan2(math.sin(a), math.cos(a))) < 1e-4]
+        if len(vs) >= 3:
+            c = sum((v.co for v in vs), Vector()) / len(vs)
+            vs.sort(key=lambda v: math.atan2((v.co - c).y, (v.co - c).dot(Vector((math.cos(a), 0, math.sin(a))))))
+            try: bm.faces.new(vs)
+            except ValueError: pass
+    bmesh.ops.remove_doubles(bm, verts=bm.verts, dist=1e-5)
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+    bm.to_mesh(o.data); bm.free(); return o
+
+def flip_toward_axis(o):
+    """Make a thin inner shell face the axis (seen from inside the crescent)."""
+    bm = bmesh.new(); bm.from_mesh(o.data)
+    for f in bm.faces:
+        c = f.calc_center_median(); radial = Vector((c.x, 0, c.z))
+        if f.normal.dot(radial) > 0: f.normal_flip()
+    bm.to_mesh(o.data); bm.free()
+
+def build_hood3():
+    clear_piece("K_Hood")
+    a0, a1 = math.radians(-15), math.radians(195); A = a1 - a0
+    lathe_solid("K_Hood_stone", [(12.6, 0.0), (13.8, 0.0), (13.8, 15.0), (13.2, 16.2), (12.6, 15.0)], 32, A, a0)
+    d = lathe("K_Hood_darkIn", [(12.55, 0.3), (12.55, 14.8)], seg=32, angle=A, start=a0); flip_toward_axis(d)
+    lathe_solid("K_Hood_stoneCanopy", [(12.6, 15.0), (13.2, 16.2), (7.6, 16.8), (7.0, 15.6)], 32, A, a0)
+    u = lathe("K_Hood_darkUnder", [(7.1, 15.5), (12.5, 14.95)], seg=32, angle=A, start=a0)
+    bm = bmesh.new(); bm.from_mesh(u.data)
+    for f in bm.faces:
+        if f.normal.y > 0: f.normal_flip()
+    bm.to_mesh(u.data); bm.free()
+    N = 48
+    tube_along("K_Hood_goldLip", [(7.1 * math.cos(a0 + A * i / N), 15.8, 7.1 * math.sin(a0 + A * i / N)) for i in range(N + 1)], 0.5)
+    tube_along("K_Hood_goldTop", [(13.8 * math.cos(a0 + A * i / N), 16.3, 13.8 * math.sin(a0 + A * i / N)) for i in range(N + 1)], 0.45)
+    for k, a in enumerate((a0, a1)):
+        ca, sa = math.cos(a), math.sin(a)
+        tube_along(f"K_Hood_goldEdge{k}", [(12.6 * ca, 0.3, 12.6 * sa), (12.6 * ca, 15.0, 12.6 * sa), (7.1 * ca, 15.8, 7.1 * sa)], 0.5)
+        tube_along(f"K_Hood_goldEdgeO{k}", [(13.8 * ca, 0.3, 13.8 * sa), (13.8 * ca, 16.2, 13.8 * sa)], 0.5)
+        rbox(f"K_Hood_stoneHorn{k}", 2.4, 3.6, 2.4, bevel=0.9, loc=(13.2 * ca, 17.8, 13.2 * sa))
+    lathe_solid("K_Hood_stoneBase", [(0.01, 0.0), (15.0, 0.0), (15.0, 1.0), (0.01, 1.0)], 36, 2 * math.pi - 1e-3, 0)
+    tube_along("K_Hood_goldBase", [(15.0 * math.cos(2 * math.pi * i / 64), 1.0, 15.0 * math.sin(2 * math.pi * i / 64)) for i in range(64)], 0.4, closed=True)
+
+def build_channel_ramp():
+    """The channel as it runs down the 8-step flight: its own piece at the true ramp length (no stretching in Studio)."""
+    clear_piece("K_ChanRamp")
+    L = math.sqrt(8 ** 2 + 13.6 ** 2); hw, hl = 4.0, L / 2
+    rbox("K_ChanRamp_blue", 8.0, 0.6, L, bevel=0.2, loc=(0, 0.3, 0))
+    tube_along("K_ChanRamp_goldFrame", [(-hw, 0.62, -hl), (hw, 0.62, -hl), (hw, 0.62, hl), (-hw, 0.62, hl)], 0.35, closed=True)
+    tube_along("K_ChanRamp_goldY", [(0, 0.62, -hl + 1.5), (0, 0.62, hl - 1.5)], 0.22)
+
+def build_all3():
+    build_hood3(); build_channel_ramp()

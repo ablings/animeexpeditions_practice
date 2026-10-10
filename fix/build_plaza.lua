@@ -3,7 +3,7 @@
 local IMPORT_SCALE = 40.5585   -- Import 3D scale of the FBX (19.2-stud medallion arrived as 778.7)
 local SS = game:GetService("ServerStorage")
 local kit = SS:FindFirstChild("Kit")
-local src = workspace:FindFirstChild("ae_kit_r1")
+local src = workspace:FindFirstChild("ae_kit_r3") or workspace:FindFirstChild("ae_kit_r2") or workspace:FindFirstChild("ae_kit_r1")
 if src then -- first run: move the imported model into ServerStorage.Kit at true size
 	if kit then kit:Destroy() end
 	kit = Instance.new("Folder"); kit.Name = "Kit"; kit.Parent = SS
@@ -18,10 +18,12 @@ if src then -- first run: move the imported model into ServerStorage.Kit at true
 end
 assert(kit, "no kit")
 local COL = { stone = Color3.fromRGB(128, 134, 150), gold = Color3.fromRGB(226, 160, 28), blue = Color3.fromRGB(34, 76, 200),
-	glass = Color3.fromRGB(90, 200, 255), water = Color3.fromRGB(80, 190, 255), dark = Color3.fromRGB(34, 34, 44), wood = Color3.fromRGB(120, 82, 52),
+	glass = Color3.fromRGB(90, 200, 255), water = Color3.fromRGB(80, 190, 255), dark = Color3.fromRGB(40, 44, 60), wood = Color3.fromRGB(120, 82, 52),
 	leaf = Color3.fromRGB(40, 100, 255) }
+local TINT = { BushRed = Color3.fromRGB(220, 52, 40), BushBlue = Color3.fromRGB(36, 96, 255), Grass = Color3.fromRGB(110, 205, 60) }
 local function look(p) -- colour/material by the name token after the piece prefix
-	if p.Name == "K_Hood_stone" then p.Color = Color3.fromRGB(92, 98, 116); p.Material = Enum.Material.SmoothPlastic; return end
+	local grp = p.Name:match("^K_([^_]+)_")
+	if TINT[grp] then p.Color = TINT[grp]; p.Material = Enum.Material.SmoothPlastic; p.CastShadow = false; return end
 	local tok = (p.Name:match("^K_[^_]+_(%a+)") or "stone"):lower()
 	for k, c in pairs(COL) do if tok:sub(1, #k) == k then
 		p.Color = c
@@ -58,7 +60,7 @@ local STONE, TILE = COL.stone, Color3.fromRGB(150, 154, 166)
 local FLOOR_TEX, STONE_TEX = "rbxassetid://110802131136105", "rbxassetid://87016735224776"
 -- ground and plaza floor
 part("Grass", Vector3.new(400, 2, 400), CFrame.new(0, -1.2, 0), Color3.fromRGB(96, 190, 70), Enum.Material.Grass)
-tex(part("PlazaFloor", Vector3.new(76, 2, 76), CFrame.new(0, -1, 0) * CFrame.Angles(0, math.rad(45), 0), TILE), FLOOR_TEX, 20)
+tex(part("PlazaFloor", Vector3.new(110, 2, 110), CFrame.new(0, -1, 0) * CFrame.Angles(0, math.rad(45), 0), TILE), FLOOR_TEX, 20)
 tex(part("PlazaCross", Vector3.new(150, 2, 42), CFrame.new(0, -0.98, 0), TILE), FLOOR_TEX, 20)
 tex(part("PlazaCross2", Vector3.new(42, 2, 150), CFrame.new(0, -0.98, 0), TILE), FLOOR_TEX, 20)
 place("K_Medal", CFrame.new(0, 0, 0))
@@ -76,13 +78,15 @@ for i = 0, 3 do
 	for s = 0, 7 do
 		local d = 22 + s * 1.7
 		for side = -1, 1, 2 do
-			place("K_Step", CFrame.new(dir * d + Vector3.new(0, s, 0)) * rot * CFrame.new(side * 11.5, 0, 0) * CFrame.Angles(0, 0, 0), 1).Name = "Step"
+			local st = place("K_Step", CFrame.new(dir * d + Vector3.new(0, s, 0)) * rot * CFrame.new(side * 12.5, 0, 0), 1); for _, q in ipairs(st:GetChildren()) do q.Size = Vector3.new(17, q.Size.Y, q.Size.Z) end
 		end
 	end
 	tex(part("AvenueDeck" .. i, Vector3.new(42, 8, 60), CFrame.new(dir * (22 + 8 * 1.7 + 30) + Vector3.new(0, 4 - 0.02, 0)) * rot, TILE), FLOOR_TEX, 20)
 	-- channel panel: down the steps (tilted) and flat on the deck
 	local tilt = math.atan(8 / (8 * 1.7))
-	place("K_Channel", CFrame.new(dir * (22 + 4 * 1.7) + Vector3.new(0, 4.1, 0)) * rot * CFrame.Angles(tilt, 0, 0), 1)
+	local w = Instance.new("WedgePart"); w.Anchored = true; w.Size = Vector3.new(8, 8, 8 * 1.7); w.Color = STONE; w.Material = Enum.Material.SmoothPlastic
+	w.CFrame = CFrame.new(dir * (22 + 4 * 1.7 - 0.85) + Vector3.new(0, 4, 0)) * rot * CFrame.Angles(0, math.rad(180), 0); w.Parent = root
+	place("K_ChanRamp", CFrame.new(dir * (22 + 4 * 1.7 - 0.85) + Vector3.new(0, 4.05, 0)) * rot * CFrame.Angles(tilt, 0, 0), 1)
 	place("K_Channel", CFrame.new(dir * (22 + 8 * 1.7 + 25) + Vector3.new(0, 8.05, 0)) * rot)
 	for side = -1, 1, 2 do
 		place("K_Plinth", CFrame.new(dir * 20.5) * rot * CFrame.new(side * 8.5, 0, 0) * CFrame.Angles(0, math.rad(180), 0), 0.7)
@@ -91,7 +95,7 @@ end
 -- four corner fountain blocks, hoods opening toward the plaza centre
 for i = 0, 3 do
 	local a = math.rad(45 + 90 * i)
-	local c = Vector3.new(39 * math.cos(a), 0, 39 * math.sin(a))
+	local c = Vector3.new(54 * math.cos(a), 0, 54 * math.sin(a))
 	local cf = CFrame.lookAt(c, c * 2) -- -Z away from the centre, so the hood's open +Z side faces the plaza
 	part("BlockPlatform" .. i, Vector3.new(2, 34, 34), CFrame.new(c + Vector3.new(0, 0.5, 0)) * CFrame.Angles(0, 0, math.rad(90)), STONE, Enum.Material.SmoothPlastic, Enum.PartType.Cylinder)
 	place("K_Hood", cf * CFrame.new(0, 1, 0))
@@ -99,6 +103,17 @@ for i = 0, 3 do
 	place("K_PuffTree", cf * CFrame.new(0, 1, -6), 1.1)
 	for side = -1, 1, 2 do place("K_Pav", cf * CFrame.new(side * 15.5, 1, 4)) end
 	place("K_Palm", cf * CFrame.new(0, 0, -24) * CFrame.Angles(0, math.rad(40 * i), 0), 1.2)
+end
+local rng = Random.new(7)
+for i = 1, 120 do
+	local blk = math.rad(45 + 90 * (i % 4)); local bc = Vector3.new(54 * math.cos(blk), 0, 54 * math.sin(blk))
+	local a = rng:NextNumber(0, 2 * math.pi); local r = rng:NextNumber(15, 24)
+	local p = bc + Vector3.new(r * math.cos(a), 0, r * math.sin(a))
+	if math.abs(p.X) > 21 and math.abs(p.Z) > 21 then
+		local kind = (p.X > 0) and "K_BushRed" or "K_BushBlue"
+		if i % 3 == 0 then kind = "K_Grass" end
+		place(kind, CFrame.new(p) * CFrame.Angles(0, rng:NextNumber(0, 6.28), 0), rng:NextNumber(0.9, 1.6))
+	end
 end
 local n = 0; for _, d in ipairs(root:GetDescendants()) do if d:IsA("BasePart") then n += 1 end end
 local sp = workspace:FindFirstChild("SpawnLocation"); if sp then sp.CFrame = CFrame.new(0, 0.6, 30); sp.Transparency = 1; sp.CanCollide = false; local dc = sp:FindFirstChildOfClass("Decal"); if dc then dc:Destroy() end end
