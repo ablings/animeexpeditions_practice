@@ -2926,3 +2926,103 @@ def export_r15(path):
     bpy.ops.export_scene.fbx(filepath=path, use_selection=True, object_types={'MESH'}, apply_unit_scale=True,
                              mesh_smooth_type='OFF', use_mesh_modifiers=True, axis_forward='-Z', axis_up='Y')
     return [o.name for o in sel]
+
+# ---------------------------------------------------------------- pass 16 (verify13 items 3 and 4: medallion, bollard, Story trunk)
+def build_scale16():
+    clear_piece("K_Scale16_"); return rbox("K_Scale16_stone", 10.0, 10.0, 10.0, 0.01, 1)
+
+def build_blades16():
+    """Medallion shuriken (reference top capture ref16_medal_top: 8 short thick hooked blades, about 0.55 of the pale disc's
+    radius, joined round a dark ring behind the gold hub). Authored flat at y 0..0.12, radius 4.9; Studio drops it on the disc."""
+    clear_piece("K_Blade16"); clear_piece("Q_")
+    objs = []
+    for i in range(8):
+        o = extrude_outline(f"Q_bl{i}", blade_outline(2 * math.pi * i / 8, r0=1.3, r1=4.9, sweep=0.62, w=0.95, n=12), 0.12, bevel=0.0)
+        o.rotation_euler = (math.radians(90), 0, 0); o.location = (0, 0.06, 0); flat(o)
+        o.data.flip_normals()
+        objs.append(o)
+    objs.append(flat(lathe("Q_ring", [(0, 0), (2.1, 0), (2.1, 0.12), (0, 0.12)], seg=32, smooth=False)))
+    return merge_objs("K_Blade16_dark", objs)
+
+def build_bollard16():
+    """Squat square bollard (verify13 item 3): grey stone foot 3.0 wide x 0.5, tapered body 2.4 -> 2.0 up to 2.5, and a faceted
+    pointed gold cap (a 4-sided lathe: square bishop's mitre) about 2 tall. Square sections = 4-segment lathe turned 45 deg."""
+    clear_piece("K_Bollard16"); clear_piece("Q_")
+    sq = lambda name, prof: flat(lathe(name, prof, seg=4, start=math.pi / 4, smooth=False))
+    k = math.sqrt(2)
+    stone = [sq("Q_foot", [(0, 0), (1.5 * k, 0), (1.5 * k, 0.5), (1.3 * k, 0.62), (0, 0.62)]),
+             sq("Q_body", [(0, 0.62), (1.2 * k, 0.62), (1.0 * k, 2.3), (1.12 * k, 2.38), (1.12 * k, 2.5), (0, 2.5)])]
+    prof = [(0, 2.5), (0.95 * k, 2.5), (0.95 * k, 2.72), (0.9 * k, 3.25), (0.72 * k, 3.75), (0.42 * k, 4.18), (0.0, 4.55)]
+    gold = [sq("Q_cap", prof)]
+    merge_objs("K_Bollard16_stone", stone); merge_objs("K_Bollard16_gold", gold)
+
+def taper_tube(name, pts, radii, res=8, jitter=0.0, seed=0):
+    """Tube along pts with a radius per point (closed end caps): gnarled limbs. jitter roughens the ring radii."""
+    import random; rnd = random.Random(seed)
+    bm = bmesh.new(); rings = []
+    P = [Vector(p) for p in pts]
+    up = Vector((0, 1, 0))
+    for i, p in enumerate(P):
+        t = (P[min(i + 1, len(P) - 1)] - P[max(i - 1, 0)]).normalized()
+        a = t.cross(up if abs(t.dot(up)) < 0.95 else Vector((1, 0, 0))).normalized(); b = t.cross(a).normalized()
+        ring = []
+        for j in range(res):
+            th = 2 * math.pi * j / res; r = radii[i] * (1 + rnd.uniform(-jitter, jitter))
+            ring.append(bm.verts.new(p + (a * math.cos(th) + b * math.sin(th)) * r))
+        rings.append(ring)
+    for i in range(len(rings) - 1):
+        for j in range(res):
+            bm.faces.new((rings[i][j], rings[i][(j + 1) % res], rings[i + 1][(j + 1) % res], rings[i + 1][j]))
+    bm.faces.new(list(reversed(rings[0]))); bm.faces.new(rings[-1])
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+    return mesh_obj(name, bm, True, 70)
+
+def build_trunk16(seed=161):
+    """Story tree trunk (verify13 item 4): a flared, twisting trunk that splits at about 2/3 height into 5 thick gnarled limbs
+    reaching out and up into the canopy. Authored base at y 0, split at y 27, limb tips at y 44-52, 17-26 out. Studio scales it."""
+    import random; rnd = random.Random(seed)
+    clear_piece("K_Trunk16"); clear_piece("Q_")
+    objs = []
+    # trunk: 7 rings, slight twist/lean, root flare
+    tp = [(0, -1.0, 0), (0.3, 3, 0.2), (0.8, 9, -0.4), (0.4, 15, 0.3), (-0.3, 21, 0.2), (0, 26, 0), (0, 29, 0)]
+    tr = [8.5, 6.2, 5.2, 4.8, 4.6, 4.9, 4.4]
+    objs.append(taper_tube("Q_trunk", tp, tr, res=10, jitter=0.08, seed=seed))
+    # root buttresses
+    for k in range(5):
+        a = 2 * math.pi * k / 5 + 0.3
+        objs.append(taper_tube(f"Q_root{k}", [(math.cos(a) * 4.5, 5.5, math.sin(a) * 4.5), (math.cos(a) * 8.0, 1.5, math.sin(a) * 8.0),
+                                              (math.cos(a) * 10.5, -0.6, math.sin(a) * 10.5)], [2.2, 1.6, 0.9], res=7, jitter=0.1, seed=k))
+    # 5 limbs from the split
+    for k in range(5):
+        a = 2 * math.pi * k / 5 + rnd.uniform(-0.25, 0.25)
+        R = rnd.uniform(17, 26); H = rnd.uniform(44, 52)
+        d = Vector((math.cos(a), 0, math.sin(a))); s = Vector((-d.z, 0, d.x)) * rnd.uniform(-3, 3)
+        pts = [Vector((0, 25, 0)) + d * 1.2,
+               Vector((0, 31, 0)) + d * (R * 0.25) + s * 0.4,
+               Vector((0, 37, 0)) + d * (R * 0.52) - s * 0.5,
+               Vector((0, 42, 0)) + d * (R * 0.78) + s,
+               Vector((0, H, 0)) + d * R]
+        objs.append(taper_tube(f"Q_limb{k}", [tuple(p) for p in pts], [3.0, 2.5, 2.0, 1.5, 0.9], res=8, jitter=0.1, seed=10 + k))
+        # one side branch per limb
+        m = pts[2]; d2 = (d + Vector((-d.z, 0, d.x)) * rnd.choice((-0.9, 0.9))).normalized()
+        objs.append(taper_tube(f"Q_br{k}", [tuple(m), tuple(m + d2 * 5 + Vector((0, 4, 0))), tuple(m + d2 * 9 + Vector((0, 9, 0)))], [1.3, 0.9, 0.5], res=6, jitter=0.1, seed=20 + k))
+    o = merge_objs("K_Trunk16_wood", objs)
+    for p in o.data.polygons: p.use_smooth = True
+    return o
+
+R16_PREFIXES = ("K_Scale16_", "K_Blade16_", "K_Bollard16_", "K_Trunk16_")
+
+def build_all16():
+    build_scale16(); build_blades16(); build_bollard16(); build_trunk16()
+    return {p: tri_count(p) for p in R16_PREFIXES}
+
+def export_r16(path):
+    """Z-up, then export ONLY the pass-16 pieces plus the 10-stud cube (merged into Kit in Studio)."""
+    to_zup_and_uv()
+    bpy.ops.object.select_all(action='DESELECT')
+    sel = [o for o in bpy.data.objects if o.type == 'MESH' and o.name.startswith(R16_PREFIXES)]
+    for o in sel: o.select_set(True)
+    bpy.context.view_layer.objects.active = sel[0]
+    bpy.ops.export_scene.fbx(filepath=path, use_selection=True, object_types={'MESH'}, apply_unit_scale=True,
+                             mesh_smooth_type='OFF', use_mesh_modifiers=True, axis_forward='-Z', axis_up='Y')
+    return [o.name for o in sel]
