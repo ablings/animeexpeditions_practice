@@ -359,14 +359,16 @@ if HAS14 then
 	local PAD = { blue = "rbxassetid://128476770660093", gold = "rbxassetid://113808789273710", purple = "rbxassetid://125616853910581", grey = "rbxassetid://131174075081185" }
 	local ROUGH, METAL = "rbxassetid://79618306495225", "rbxassetid://133069801476067"
 	local SKY = rgb(170, 210, 235)
+	-- pass 15: the r15 loose clump (no filler cards) replaces the r14 one when it is in Kit
+	local KP = kit:FindFirstChild("K_Soft15K_leaf") and "K_Soft15K_" or "K_Soft14K_"
 	local lo, hi = math.huge, -math.huge
-	for _, k in ipairs(kit:GetChildren()) do if k.Name:sub(1, 10) == "K_Soft14K_" then lo = math.min(lo, k.Position.Y - k.Size.Y / 2); hi = math.max(hi, k.Position.Y + k.Size.Y / 2) end end
+	for _, k in ipairs(kit:GetChildren()) do if k.Name:sub(1, 10) == KP then lo = math.min(lo, k.Position.Y - k.Size.Y / 2); hi = math.max(hi, k.Position.Y + k.Size.Y / 2) end end
 	local function clump(pos, scale, fam, tint, parent, yaw, haze)
 		-- pos = clump centre; fam = baked texture family (blue/gold/purple) or grey + tint (dark, light)
-		local m = Instance.new("Model"); m.Name = "K_Soft14K"
+		local m = Instance.new("Model"); m.Name = KP:sub(1, 9)
 		local cf = CFrame.new(pos) * CFrame.Angles(0, yaw, 0)
 		for _, k in ipairs(kit:GetChildren()) do
-			if k.Name:sub(1, 10) == "K_Soft14K_" then
+			if k.Name:sub(1, 10) == KP then
 				local c = k:Clone(); c.Size = k.Size * scale; c.CFrame = cf * CFrame.new(k.Position * scale) * (k.CFrame - k.CFrame.Position)
 				c.Anchored = true; c.CanCollide = false; c.CanQuery = false; c.CanTouch = false; c.CastShadow = false; c.Material = SM
 				local tok = k.Name:match("_(%a+)$")

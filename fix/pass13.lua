@@ -84,7 +84,8 @@ local HAS13 = kit and kit:FindFirstChild("K_Soft13R_leaf") ~= nil
 -- pass 14: when the r14 kit (finer cards, K_Soft14*) is in Kit, every soft tree is built from it instead (same placement,
 -- same seeds), with the pass-14 leaf textures (gradient baked in per family) and a no-glint Roughness/Metalness map.
 -- The palm stays K_Soft13P (its fronds are long sprig cards and read as fronds).
-local GEN = (kit and kit:FindFirstChild("K_Soft14R_leaf")) and 14 or 13
+-- pass 15: the r15 kit (no filler cards, 120-200 small cards per clump at random orientations) wins when present
+local GEN = (kit and kit:FindFirstChild("K_Soft15R_leaf")) and 15 or ((kit and kit:FindFirstChild("K_Soft14R_leaf")) and 14 or 13)
 _G.P13_GEN = GEN
 if HAS13 then
 	-- Old trees are not destroyed: they move into ServerStorage.Pass13Old with an ObjectValue "Orig13" naming their parent,
@@ -115,7 +116,7 @@ if HAS13 then
 	end
 	local SKY = rgb(170, 210, 235)
 	local function gen(prefix)
-		if GEN == 14 and prefix ~= "K_Soft13P" then return (prefix:gsub("Soft13", "Soft14")) end
+		if GEN >= 14 and prefix ~= "K_Soft13P" then return (prefix:gsub("Soft13", "Soft" .. GEN)) end
 		return prefix
 	end
 	-- pass-14 own textures (tex/make_ae_tex14.py, uploaded with upload_image; ids in out/r14w/leaf14_assets.json)
@@ -139,7 +140,8 @@ if HAS13 then
 		-- pos = where the foot (lowest point) goes; leaves get the own leaf texture through a tinted cut-out SurfaceAppearance
 		local f = FAM[fam] or FAM.green; local dark, light = f[1], f[2]
 		prefix = gen(prefix)
-		local baked = (prefix:find("Soft14") ~= nil) and T14.spray[fam] ~= nil -- blue/gold/purple: colour is in the texture
+		local fine = prefix:find("Soft14") ~= nil or prefix:find("Soft15") ~= nil
+		local baked = fine and T14.spray[fam] ~= nil -- blue/gold/purple: colour is in the texture
 		if baked then dark, light = rgb(225, 225, 225), rgb(255, 255, 255) end
 		if haze then dark = dark:Lerp(SKY, haze); light = light:Lerp(SKY, haze) end
 		local e = ext(prefix)
@@ -155,7 +157,7 @@ if HAS13 then
 				else
 					c.CastShadow = false
 					local sa = Instance.new("SurfaceAppearance"); sa.AlphaMode = Enum.AlphaMode.Transparency
-					if prefix:find("Soft14") then
+					if fine then
 						local tf = baked and fam or "grey"
 						sa.ColorMap = (tok == "leafPad") and T14.pad[tf] or T14.spray[tf]
 						sa.RoughnessMap = T14.rough; sa.MetalnessMap = T14.metal -- roughness 1, metalness 0: no glint
@@ -246,6 +248,7 @@ if HAS13 then
 				if x.Name == "IslTreeBall" or x.Name == "IslPuff" then
 					local m = soft("K_Soft13K", x.Position - Vector3.new(0, x.Size.Y * 0.4, 0), math.max(x.Size.X, x.Size.Z) / 7, "green", TREES, rng:NextNumber(0, 6.28), 0.05)
 					if x:GetAttribute("P14Isl") then m:SetAttribute("P14Isl", true) end -- moved with its island by pass 14
+					if x:GetAttribute("P15Isl") then m:SetAttribute("P15Isl", true); m:SetAttribute("P15D", x:GetAttribute("P15D")) end -- and by pass 15 (same delta as its ball)
 					stash(x); tick()
 				end
 			end
@@ -277,7 +280,13 @@ if HAS13 then
 	end
 	mass("K_Soft13W", { { 46, -182 }, { 58, -196 }, { 50, -210 }, { 66, -178 } }, "purple", 22)
 	mass("K_Soft13W", { { 66, -66 }, { 78, -58 }, { 60, -80 } }, "purple", 19)
-	mass("K_Soft13U", { { -62, -205 }, { -76, -190 } }, "gold", 30)
+	if GEN == 15 and kit:FindFirstChild("K_Soft15G_leaf") then
+		-- verify12 item 1: one continuous gold cloud canopy (~30 x 23) behind Summon instead of 2 umbrella trees + 6 balls
+		local gy = groundY(-68, -198, 60)
+		soft("K_Soft15G", Vector3.new(-68, gy, -198), 1.15, "gold", TREES, 0.4)
+	else
+		mass("K_Soft13U", { { -62, -205 }, { -76, -190 } }, "gold", 30)
+	end
 end
 end
 return "pass13 ok, gen " .. tostring(_G.P13_GEN)

@@ -2665,3 +2665,264 @@ def export_r14(path):
     bpy.ops.export_scene.fbx(filepath=path, use_selection=True, object_types={'MESH'}, apply_unit_scale=True,
                              mesh_smooth_type='OFF', use_mesh_modifiers=True, axis_forward='-Z', axis_up='Y')
     return [o.name for o in sel]
+
+# ---------------------------------------------------------------- pass 15: clumps without interior facets (verify12 item 1)
+# Round 12: inside each clump's outline the crossed filler cards (2r across, pad heap texture) and the level card still
+# read as large flat triangular facets (3-5 studs, a crease down the middle): "faceted balls / cabbage heads". New close
+# captures of the live reference (out/r15w/ref15_tree_close.png) show a reference clump is a loose burst of many small
+# flat leaf sprays at every orientation, see-through at the edges, with NO shell or core plane at all.
+# Pass 15 therefore:
+#  - drops every filler / level card (no K_*_leafPad mesh at all) and every card over 2.5 studs;
+#  - fills each clump with 120-200 spray cards of 1.3-2.2 studs (0.65-0.85 as wide), each at a random orientation (a random unit normal,
+#    a random roll), so neighbours never share a plane; positions fill the volume biased toward the shell
+#    (radius r * (0.35 + 0.65 * u^0.35)); inner cards (< 0.62 r) go to the darker IN mesh, so the core reads dark;
+#  - outer cards get 35% of the radial direction blended into their random normal (never edge-on at the rim, lesson 4
+#    of pass 14), inner cards are fully random;
+#  - normals: out of the clump centre (spherical transfer, k 0.9), kept per side in the side's own hemisphere (Leaves14,
+#    pass-14 lesson 1) with a lower floor (0.25), so the shading falls smoothly from the lit top to the dark core;
+#  - 1 segment per card (4 tris with its back twin): each tree stays under ~5k triangles.
+# Gold: build_gold15 is ONE continuous cloud canopy about 30 x 20 (11 overlapping clumps on an uneven ellipsoid) on a
+# gnarled trunk splitting into limbs, for the mass behind Summon.
+
+class Leaves15(Leaves14):
+    @staticmethod
+    def side_n(n, gn, m=0.25):
+        n = Vector(n); d = n.dot(gn)
+        if d < m: n = n + gn * (m - d)
+        return tuple(n.normalized())
+
+def rand_unit():
+    while True:
+        v = Vector((random.uniform(-1, 1), random.uniform(-1, 1), random.uniform(-1, 1)))
+        if 0.05 < v.length <= 1: return v.normalized()
+
+def card15(LV, p, nrm, L, W, c):
+    """Flat spray card centred at p with face normal nrm (any orientation), random roll, L long, W wide; V runs along
+    the card (the spray texture's stem), U across. Normals out of the clump centre c."""
+    nrm = Vector(nrm).normalized(); p = Vector(p)
+    ref = Vector((0, 1, 0)) if abs(nrm.y) < 0.9 else Vector((1, 0, 0))
+    a = nrm.cross(ref).normalized(); a = Matrix.Rotation(random.uniform(0, 2 * math.pi), 3, nrm) @ a
+    s = nrm.cross(a).normalized()
+    b = p - a * L * 0.5
+    q = [b - s * W * 0.5, b + a * L - s * W * 0.5, b + a * L + s * W * 0.5, b + s * W * 0.5]
+    fn = (q[1] - q[0]).cross(q[3] - q[0]).normalized()
+    LV.quad(q, [(0, 0), (0, 1), (1, 1), (1, 0)], [soft_normal14(x, c, fn, 0.9, 0.12) for x in q])
+
+def clump15(IN, OUT, c, r, n=150, flat=1.0, Lc=(1.3, 2.2), core=0.62):
+    """Clump of radius r: n small cards at random orientations through the volume (no filler shell). flat squashes Y."""
+    c = Vector(c)
+    for k in range(n):
+        d = rand_unit(); d = Vector((d.x, d.y * flat, d.z))
+        t = 0.35 + 0.65 * random.random() ** 0.35
+        p = c + d * r * t
+        L = random.uniform(*Lc); W = L * random.uniform(0.65, 0.85)
+        nr = rand_unit()
+        if t > core:
+            out = d.normalized()
+            if nr.dot(out) < 0: nr = -nr
+            nr = (nr * 0.65 + out * 0.35).normalized()
+        card15(IN if t < core else OUT, p, nr, L, W, c)
+
+def finish15(tag, IN, OUT):
+    IN.obj(f"K_{tag}_leaf"); OUT.obj(f"K_{tag}_leafRim")
+
+def build_round15(tag="Soft15R", seed=151, H=20.0, R=10.0, nclus=7, cr=4.4, trunk_r=1.0, n=158):
+    random.seed(seed); clear_piece(f"K_{tag}_"); clear_piece("Q_")
+    IN, OUT = Leaves15(), Leaves15()
+    top = Vector((random.uniform(-0.8, 0.8), H * 0.6, random.uniform(-0.8, 0.8)))
+    trunk = [Vector((0, -0.3, 0)), Vector((0.4, H * 0.3, 0.1)), top]
+    cents = [top + Vector((0, R * 0.5, 0))]
+    for i in range(nclus - 1):
+        a = 2 * math.pi * i / (nclus - 1) + random.uniform(-0.25, 0.25)
+        cents.append(top + Vector((R * 0.55 * math.cos(a), R * random.uniform(0.0, 0.3), R * 0.55 * math.sin(a))))
+    segs = [trunk] + [branch_to(top, c) for c in cents[1:]]
+    for c in cents: clump15(IN, OUT, c, cr * random.uniform(0.9, 1.1), n)
+    wood13(tag, segs, trunk_r); finish15(tag, IN, OUT)
+
+def build_cloud15(tag="Soft15C", seed=152, H=26.0, npad=5, cr=4.8, trunk_r=1.0, n=190):
+    random.seed(seed); clear_piece(f"K_{tag}_"); clear_piece("Q_")
+    IN, OUT = Leaves15(), Leaves15()
+    trunk = [Vector((0, -0.3, 0)), Vector((1.8, H * 0.25, 0.6)), Vector((-0.9, H * 0.55, -0.6)), Vector((0.7, H * 0.85, 0.4))]
+    segs = [trunk]; cents = [Vector((0.7, H + 0.3, 0.4))]
+    for i in range(npad - 1):
+        t = 0.38 + 0.47 * i / (npad - 1); a = i * 2.2 + random.uniform(-0.3, 0.3)
+        b0 = Vector((0, H * t, 0)); c = Vector((6.5 * math.cos(a), H * t + 2.0, 6.5 * math.sin(a)))
+        segs.append([b0, b0.lerp(c, 0.5) + Vector((0, 1.4, 0)), c]); cents.append(c)
+    segs.append([trunk[-1], cents[0]])
+    for c in cents: clump15(IN, OUT, c, cr * random.uniform(0.9, 1.1), n, flat=0.6)
+    wood13(tag, segs, trunk_r); finish15(tag, IN, OUT)
+
+def build_umb15(tag="Soft15U", seed=153, H=28.0, R=17.0, nclus=8, cr=5.2, trunk_r=1.6, n=145):
+    random.seed(seed); clear_piece(f"K_{tag}_"); clear_piece("Q_")
+    IN, OUT = Leaves15(), Leaves15()
+    fork = Vector((0, H * 0.45, 0)); segs = [[Vector((0, -0.3, 0)), Vector((0.5, H * 0.2, 0)), fork]]
+    cents = [Vector((0, H, 0))]
+    for i in range(nclus - 1):
+        a = 2 * math.pi * i / (nclus - 1) + random.uniform(-0.2, 0.2); rr = R * random.uniform(0.45, 0.62)
+        cents.append(Vector((rr * math.cos(a), H - 1.6 + random.uniform(-1.0, 1.0), rr * math.sin(a))))
+    for k, c in enumerate(cents[1:]):
+        if k % 2 == 0: segs.append(branch_to(fork, c, 0.15))
+    segs.append([fork, cents[0]])
+    for c in cents: clump15(IN, OUT, c, cr * random.uniform(0.9, 1.1), n, flat=0.75)
+    wood13(tag, segs, trunk_r); finish15(tag, IN, OUT)
+
+def build_wis15(tag="Soft15W", seed=154, H=20.0, R=10.0, nclus=6, cr=4.4, nhang=30, trunk_r=1.0, n=150):
+    random.seed(seed); clear_piece(f"K_{tag}_"); clear_piece("Q_")
+    IN, OUT = Leaves15(), Leaves15()
+    top = Vector((0.6, H * 0.62, 0)); segs = [[Vector((0, -0.3, 0)), Vector((-0.8, H * 0.35, 0.4)), top]]
+    cents = [top + Vector((0, R * 0.4, 0))]
+    for i in range(nclus - 1):
+        a = 2 * math.pi * i / (nclus - 1) + random.uniform(-0.3, 0.3)
+        cents.append(top + Vector((R * 0.65 * math.cos(a), R * random.uniform(0.05, 0.3), R * 0.65 * math.sin(a))))
+    segs += [branch_to(top, c) for c in cents[1:]]
+    for c in cents: clump15(IN, OUT, c, cr, n, flat=0.85)
+    for h in range(nhang):  # hanging racemes: chains of 2-3 small cards (no card over 2.5 studs)
+        c = random.choice(cents); a = random.uniform(0, 2 * math.pi); rr = cr * random.uniform(0.3, 0.9)
+        b = c + Vector((rr * math.cos(a), -cr * 0.4, rr * math.sin(a)))
+        for j in range(random.randint(2, 3)):
+            lcard14(OUT, b - Vector((0, 1.8 * j, 0)), Vector((0.12 * math.cos(a), -1, 0.12 * math.sin(a))), 2.0, 1.2, 0.0,
+                    random.uniform(0, math.pi), 1, c - Vector((0, cr, 0)))
+    wood13(tag, segs, trunk_r); finish15(tag, IN, OUT)
+
+def build_cyp15(tag="Soft15Y", seed=155, H=17.0, Rb=2.6, n=260):
+    """Cypress column with no crossed pad cards: n small cards at random orientations through a tapering column."""
+    random.seed(seed); clear_piece(f"K_{tag}_"); clear_piece("Q_")
+    IN, OUT = Leaves15(), Leaves15()
+    segs = [[Vector((0, -0.3, 0)), Vector((0, 2.5, 0))]]
+    for i in range(n):
+        y = 1.4 + random.random() ** 0.9 * (H - 2.4); t = (y - 1.4) / (H - 2.4)
+        rmax = Rb * (1 - t) ** 0.7 * 0.95 + 0.35
+        a = random.uniform(0, 2 * math.pi); u = 0.25 + 0.75 * random.random() ** 0.5
+        p = Vector((math.cos(a) * rmax * u, y, math.sin(a) * rmax * u)); cc = Vector((0, y, 0))
+        out = Vector((math.cos(a), 0.25, math.sin(a))).normalized(); nr = rand_unit()
+        if nr.dot(out) < 0: nr = -nr
+        nr = (nr * 0.65 + out * 0.35).normalized()
+        L = random.uniform(1.0, 1.7) * (1 - 0.3 * t)
+        card15(IN if u < 0.6 else OUT, p, nr, L, L * 0.6, cc)
+    wood13(tag, segs, 0.45); finish15(tag, IN, OUT)
+
+def build_clump15(tag="Soft15K", seed=158, r=4.0, n=200):
+    random.seed(seed); clear_piece(f"K_{tag}_")
+    IN, OUT = Leaves15(), Leaves15()
+    clump15(IN, OUT, (0, 0, 0), r, n)
+    finish15(tag, IN, OUT)
+
+def build_bush15(tag="Soft15B", seed=157, r=2.6, n=120):
+    random.seed(seed); clear_piece(f"K_{tag}_")
+    IN, OUT = Leaves15(), Leaves15()
+    clump15(IN, OUT, (0, r * 0.55, 0), r, n, flat=0.75, Lc=(1.0, 1.6))
+    finish15(tag, IN, OUT)
+
+def build_gold15(tag="Soft15G", seed=159, W=30.0, Hc=20.0, base=13.0, nclus=11, n=106, trunk_r=1.5):
+    """Gold cloud canopy (behind Summon): ONE continuous uneven mass ~W wide x Hc tall whose underside sits near `base`,
+    made of nclus overlapping clumps (r 5-6.5) on an irregular ellipsoid, on a gnarled trunk splitting into limbs at
+    about 0.62 of the base height. Clumps overlap ~40%, so no single ball outline survives."""
+    random.seed(seed); clear_piece(f"K_{tag}_"); clear_piece("Q_")
+    IN, OUT = Leaves15(), Leaves15()
+    fork = Vector((0.8, base * 0.62, -0.4))
+    segs = [[Vector((0, -0.3, 0)), Vector((-0.9, base * 0.3, 0.5)), fork]]
+    cy = base + Hc * 0.4; cents = [Vector((0, base + Hc * 0.68, 0))]
+    for i in range(1, nclus):
+        a = 2 * math.pi * i / (nclus - 1) + random.uniform(-0.3, 0.3)
+        rr = random.uniform(0.5, 0.8); tier = 1 if i % 3 == 0 else 0
+        cents.append(Vector((W * 0.5 * rr * math.cos(a) * 0.82, cy + random.uniform(-2.0, 2.5) + tier * Hc * 0.25,
+                             W * 0.5 * rr * math.sin(a) * 0.6)))
+    for k, c in enumerate(cents[1:]):
+        if k % 2 == 0:
+            m = fork.lerp(c, 0.5) + Vector((random.uniform(-1.5, 1.5), 1.5, random.uniform(-1.5, 1.5)))
+            segs.append([fork, m, c.lerp(m, 0.3)])
+    segs.append([fork, cents[0] - Vector((0, 4, 0))])
+    for c in cents: clump15(IN, OUT, c, random.uniform(5.0, 6.5), n, flat=0.8, Lc=(1.4, 2.2))
+    wood13(tag, segs, trunk_r); finish15(tag, IN, OUT)
+
+def build_skull15():
+    """Raid skull, pass 15 (verify12 item 2): the pass-8 head and jaw WITHOUT the stepped pedestal (it read as a 2-tier pink
+    toy plinth), on a tapering carved pillar in a separate mesh (K_Skull15_pillar, coloured like the facade in Studio), so
+    the skull grows out of the tower as in the reference pictures. Pillar: an 8-sided tapered shaft from under the jaw
+    (y -6.5) down to y -26, 8.5 -> 12 wide (deeper at the back), with 4 carved horizontal bands, 4 vertical ribs on the
+    diagonals that flare out at the foot like roots, and a recessed channel down the front for the red beam."""
+    clear_piece("K_Skull15_"); clear_piece("Q_")
+    bm = bmesh.new(); bmesh.ops.create_uvsphere(bm, u_segments=48, v_segments=32, radius=1.0)
+    eyes = [(0.4, -2.0), (0.4, 2.0)]; W = {}
+    g = lambda a, b: math.exp(-(a * a + b * b))
+    bm.verts.index_update()
+    for v in bm.verts:
+        x, y, z = v.co.x * 5.2, v.co.y * 6.0, v.co.z * 5.0
+        if y < -1.0:
+            t = min(1.0, (-y - 1.0) / 5.0); z *= 1 - 0.30 * t; x = x * (1 - 0.15 * t)
+        if x < 0: x *= 0.86
+        w = 0.0
+        front = max(0.0, min(1.0, (-x - 0.5) / 2.0))  # 0 at the sides, 1 on the face
+        if front > 0:
+            for ey, ez in eyes:
+                w = max(w, g((y - ey) / 1.6, (z - ez) / 1.4))
+            x += 3.6 * w * front
+            dn = g((y + 2.0) / 0.8, z / 0.6); x += 1.9 * dn * front; w = max(w, dn)
+            x -= 1.7 * front * g((y - 2.2) / 0.75, 0) * (1 - w) * (1 if abs(z) < 4.2 else 0.3)  # brow ridge
+            x += 0.7 * front * g(z / 0.55, (y - 2.6) / 1.0)                                       # brow notch
+            for s in (-1, 1):
+                ck = g((y + 1.0) / 0.8, (abs(z) - 3.2) / 1.0) if z * s > 0 else 0.0
+                x -= 1.4 * ck * front; z += s * 0.5 * ck                                          # cheekbones
+            x += 0.6 * front * g((y + 2.9) / 0.6, (abs(z) - 2.2) / 0.9)                           # under-cheek hollow
+        if abs(z) > 3.0 and -0.5 < y < 3.5 and x < 1.5:
+            z *= 1 - 0.07 * g((y - 1.2) / 1.2, (x + 1.0) / 1.5)                                  # temple hollow
+        y += 0.25 * math.sin(3.1 * z + 1.3 * x) * max(0.0, y / 6.0)                               # weathered crown
+        v.co = Vector((x, y, z)); W[v.index] = w
+    dark = bmesh.new(); dfaces = [f for f in bm.faces if sum(W[v.index] for v in f.verts) / len(f.verts) > 0.3]
+    for f in dfaces:
+        dark.faces.new([dark.verts.new(v.co) for v in f.verts])
+    bmesh.ops.delete(bm, geom=dfaces, context='FACES')
+    bone = [bm_obj("Q_head", bm, smooth=True)]
+    bone.append(rbox("Q_jaw", 6.4, 2.8, 7.4, 0.9, 2, (0.6, -6.1, 0)))
+    bone.append(rbox("Q_chin", 2.2, 2.0, 3.6, 0.6, 2, (-2.4, -6.9, 0)))
+    for i in range(8):
+        z = -2.6 + 0.74 * i
+        bone.append(rbox(f"Q_tu{i}", 0.9, 1.3, 0.62, 0.18, 1, (-2.9, -4.9, z)))
+        bone.append(rbox(f"Q_tl{i}", 0.9, 1.0, 0.62, 0.18, 1, (-2.7, -5.9, z)))
+    bone = [x for x in bone]
+    dk = []  # r8b: the pass-8 crack strips floated in front of the receding crown (read as black antennae): dropped
+    eye = []
+    for k, (ey, ez) in enumerate(eyes):
+        eye.append(lathe_at(f"Q_eye{k}", [(0.9 * math.sin(t), -0.9 * math.cos(t)) for t in [math.pi * j / 6 for j in range(7)]], (-1.6, ey, ez), 10))
+    o = merge_objs("K_Skull15_bone", bone)
+    d = bm_obj("Q_dk", dark); merge_objs("K_Skull15_dark", [d] + dk); merge_objs("K_Skull15_eye", eye)
+    pil = []
+    prof = [(0.0, -26.0), (6.2, -26.0), (6.2, -24.6), (5.6, -24.2), (5.5, -20.5), (5.9, -20.1), (5.9, -19.1), (5.2, -18.7),
+            (5.0, -15.0), (5.4, -14.6), (5.4, -13.7), (4.8, -13.3), (4.6, -10.4), (5.0, -10.0), (5.0, -9.1), (4.4, -8.7),
+            (4.3, -6.0), (0.0, -6.0)]
+    pc = lathe("Q_shaft", prof, seg=8, smooth=False)
+    for v in pc.data.vertices: v.co.z *= 1.12
+    pc.rotation_euler = (0, math.radians(22.5), 0); pc.location = (0.8, 0, 0); pil.append(pc)
+    for k in range(4):  # diagonal ribs flaring at the foot
+        a = math.radians(45 + 90 * k); ca, sa = math.cos(a), math.sin(a)
+        # ribs hug the shaft faces (apothem ~0.92 r): the first try stood 0.6 off the shaft and read as a birdcage
+        rr = lambda r: (0.8 + r * ca, r * 1.12 * sa)
+        pts = [(4.1, -7.2), (4.6, -13.0), (5.2, -19.5), (6.9, -25.8)]
+        pil.append(tube_along(f"Q_rib{k}", [(rr(r)[0], y, rr(r)[1]) for r, y in pts], 0.95, res=3))
+    pil.append(rbox("Q_chan_l", 1.0, 17.5, 0.9, 0.3, 1, (-4.1, -16.0, -1.5)))  # beam channel lips on the front face
+    pil.append(rbox("Q_chan_r", 1.0, 17.5, 0.9, 0.3, 1, (-4.1, -16.0, 1.5)))
+    pil.append(rbox("Q_collar", 8.0, 1.4, 9.4, 0.4, 2, (0.6, -6.6, 0)))
+    merge_objs("K_Skull15_pillar", pil)
+    return o
+
+def build_scale15():
+    clear_piece("K_Scale15_"); return rbox("K_Scale15_stone", 10.0, 10.0, 10.0, 0.01, 1)
+
+R15_PREFIXES = ("K_Scale15_", "K_Soft15", "K_Skull15_")
+SOFT15 = ("Soft15R", "Soft15C", "Soft15U", "Soft15W", "Soft15Y", "Soft15K", "Soft15B", "Soft15G")
+
+def build_all15():
+    build_scale15(); build_round15(); build_cloud15(); build_umb15(); build_wis15(); build_cyp15(); build_clump15()
+    build_bush15(); build_gold15(); build_skull15()
+    return {t: tri_count(f"K_{t}_") for t in SOFT15}
+
+def export_r15(path):
+    """Z-up, then export ONLY the pass-15 pieces plus the 10-stud cube (merged into Kit in Studio)."""
+    to_zup_and_uv()
+    bpy.ops.object.select_all(action='DESELECT')
+    sel = [o for o in bpy.data.objects if o.type == 'MESH' and o.name.startswith(R15_PREFIXES)]
+    for o in sel: o.select_set(True)
+    bpy.context.view_layer.objects.active = sel[0]
+    bpy.ops.export_scene.fbx(filepath=path, use_selection=True, object_types={'MESH'}, apply_unit_scale=True,
+                             mesh_smooth_type='OFF', use_mesh_modifiers=True, axis_forward='-Z', axis_up='Y')
+    return [o.name for o in sel]
