@@ -4178,3 +4178,188 @@ def export_r27(path):
     bpy.ops.export_scene.fbx(filepath=path, use_selection=True, object_types={'MESH'}, apply_unit_scale=True,
                              mesh_smooth_type='FACE', use_mesh_modifiers=True, axis_forward='-Z', axis_up='Y')
     return [o.name for o in sel]
+
+
+# ============================================================================ pass 28 (notes/fix_brief28.md, verify25_plaza.md)
+def build_stairs28(n=7, H=6.0, d0=28.0, run=20.0, lat0=4.3, lat1=17.7, bevel=0.15, segs=2, gap=0.1, recess=0.1, per=3):
+    """K_Stairs28_stone / _edge / _riser / _joint (review 25 item 1): long flat blocks, `per` per side per row (W/3 = 4.47 studs,
+    ~5x the 0.86 riser), offset rows (half blocks at the ends), 0.1 joints over a joint slab recessed only 0.1, bevel 0.15 (flat tops,
+    a small rounded nose). Every block except the top row runs back under the next row, so there is no dark slot between rows: the
+    next riser meets the tread above directly. Same 7-riser footprint as passes 25/27; split by face normal like r27."""
+    clear_piece("K_Stairs28_"); clear_piece("Q_")
+    tread = run / n; rise = H / n; objs = []; jo = []; W = lat1 - lat0; bw = W / per
+    for i in range(n):
+        h = rise * (i + 1); dfront = d0 + tread * i
+        ext = tread * 0.6 if i < n - 1 else 0.0           # tuck under the next (taller) row
+        depth = tread - gap + ext; dc = dfront + gap / 2 + depth / 2
+        ws = [bw] * per if i % 2 == 0 else [bw / 2] + [bw] * (per - 1) + [bw / 2]
+        for s in (-1, 1):
+            x = lat0
+            for w in ws:
+                objs.append(rbox(f"Q_s{i}_{s}_{x:.1f}", w - gap, h, depth, bevel=min(bevel, (w - gap) / 2.5), segs=segs,
+                                 loc=(s * (x + w / 2), h / 2, -dc)))
+                x += w
+            jo.append(rbox(f"Q_j{i}_{s}", W - 0.06, h - recess, depth - 0.1, bevel=0.02, segs=1,
+                           loc=(s * (lat0 + W / 2), (h - recess) / 2, -(dc + 0.05))))
+    st = merge_objs("K_Stairs28_stone", objs, rot4=True)
+    bm = bmesh.new(); bm.from_mesh(st.data); bm.normal_update()
+    parts = {"stone": lambda ny: ny >= 0.92, "edge": lambda ny: 0.25 <= ny < 0.92, "riser": lambda ny: ny < 0.25}
+    names = []
+    for key, keep in parts.items():
+        b2 = bm.copy(); b2.normal_update()
+        bmesh.ops.delete(b2, geom=[f for f in b2.faces if not keep(f.normal.y)], context='FACES')
+        me = bpy.data.meshes.new(f"K_Stairs28_{key}_m"); b2.to_mesh(me); b2.free()
+        if key == "stone":
+            st.data = me
+        else:
+            ob = bpy.data.objects.new(f"K_Stairs28_{key}", me); coll().objects.link(ob)
+        names.append(f"K_Stairs28_{key}")
+    bm.free()
+    merge_objs("K_Stairs28_joint", jo, rot4=True); names.append("K_Stairs28_joint")
+    return names
+
+def build_runner28(d0=17.0, d1=48.4, Wk=4.3, Wg=3.3, Wb=2.55, ds=22.6, df=37.0, dy1=39.3, X1=1.85, a=0.4, r=0.15, dl0=23.5, dl1=47.9):
+    """K_Runner28_kerb / _gold / _blue (item 4): same ramp as r23 (8.6 wide) but a 1-stud grey stone kerb, a 0.75 gold band
+    (3x the r23/r24 rim) and a 5.1 blue face. K_RunY28_gold / _core: the r25 Y scaled up (core 0.8 wide, outline r 0.15)."""
+    clear_piece("K_Runner28_"); clear_piece("K_RunY28_"); clear_piece("R_")
+    kerb = [runner_layer23("R_kerb", Wk, d0, d1, 0.0, "floor")]
+    gold = [runner_layer23("R_rim", Wg, d0 + (Wk - Wg), d1, 0.08, "in")]
+    blue = [runner_layer23("R_face", Wb, d0 + (Wk - Wb), d1 - 0.4, 0.14, "in")]
+    Y = _youtline24(ds, df, dy1, X1, a); Yd = _densify24(Y, 0.3)
+    def ribbon(name, p0, p1, off=0.17):
+        dx, dd = p1[0] - p0[0], p1[1] - p0[1]; L = math.hypot(dx, dd); nx, nd = dd / L * a, -dx / L * a
+        k = max(2, int(L / 0.4)); bm = bmesh.new(); prev = None
+        for i in range(k + 1):
+            x, d = p0[0] + dx * i / k, p0[1] + dd * i / k
+            pr = [bm.verts.new((x + s * nx, _surf23(d + s * nd) + off, -(d + s * nd))) for s in (-1, 1)]
+            if prev:
+                f = bm.faces.new((prev[0], prev[1], pr[1], pr[0])); f.normal_update()
+                if f.normal.y < 0: f.normal_flip()
+            prev = pr
+        return mesh_obj(name, bm, False)
+    core = [ribbon("R_cs", (0.0, ds), (0.0, df + 0.1))]
+    for sx in (-1, 1): core.append(ribbon(f"R_ca{sx}", (0.0, df), (sx * X1, dy1), off=0.175))
+    yg = [tube_along("R_yline", [(x, _surf23(d) + 0.2, -d) for x, d in Yd + [Yd[0]]], r, res=4)]
+    xl = X1 + a
+    for sx in (-1, 1):
+        n = int((dl1 - dl0) / 0.4)
+        yg.append(tube_along(f"R_line{sx}", [(sx * xl, _surf23(dl0 + (dl1 - dl0) * k / n) + 0.2, -(dl0 + (dl1 - dl0) * k / n)) for k in range(n + 1)], r, res=4))
+    out = []
+    for nm, lst in (("kerb", kerb), ("gold", gold), ("blue", blue)):
+        out.append(merge_objs(f"K_Runner28_{nm}", lst, rot4=True).name)
+    out.append(merge_objs("K_RunY28_gold", yg, rot4=True).name); out.append(merge_objs("K_RunY28_core", core, rot4=True).name)
+    return out
+
+def build_boll28():
+    """K_Boll28_head (item 9): faceted 4-sided dark-gold head in the K_Boll20 frame (collar at y 1.5, top ~2.85): a square collar,
+    a 4-sided bulb and a 4-sided spike, flat shaded so every facet catches the light differently."""
+    clear_piece("K_Boll28"); clear_piece("Q_")
+    o = lathe("Q_hd", [(0.0, 1.5), (0.6, 1.5), (0.6, 1.62), (0.95, 1.7), (1.02, 1.95), (0.72, 2.3), (0.35, 2.5), (0.0, 2.85)],
+              seg=4, start=math.pi / 4, smooth=False)
+    return merge_objs("K_Boll28_head", [o]).name
+
+def build_cres28(R=12.0, span=0.62, w=1.6, t=0.9, n=14):
+    """K_Cres28_stone (item 6): one floating stone crescent, an arc of radius R around the origin in the XZ plane centred on +X,
+    `span` radians long, cross-section w (radial) x t, tapering to points at both ends. Studio rotates copies about the orb."""
+    clear_piece("K_Cres28"); clear_piece("Q_")
+    rings = []
+    for k in range(n + 1):
+        u = -1 + 2 * k / n; s = max(0.12, math.sqrt(1 - u * u)); ang = u * span / 2
+        c, sn = math.cos(ang), math.sin(ang)
+        sec = [(-w / 2 * s, -t / 2 * s), (w / 2 * s, -t / 2 * s * 0.8), (w / 2 * s * 1.1, 0.0), (w / 2 * s, t / 2 * s * 0.8),
+               (-w / 2 * s, t / 2 * s), (-w / 2 * s * 1.15, 0.0)]
+        rings.append([((R + dr) * c, dy, (R + dr) * sn) for dr, dy in sec])
+    o = loft23("Q_c", rings)
+    for p in o.data.polygons: p.use_smooth = False
+    return merge_objs("K_Cres28_stone", [o]).name
+
+def _pointed28(hw, spring, n=12):
+    """Equilateral pointed arch outline (x, y) for half-width hw: left jamb foot -> apex -> right jamb foot."""
+    R = 2 * hw; pts = [(-hw, 0.0)]
+    for k in range(n + 1):           # left arc: centre (+hw, spring), from angle pi to pi - 60deg
+        a = math.pi - math.radians(60) * k / n; pts.append((hw + R * math.cos(a), spring + R * math.sin(a)))
+    for k in range(1, n + 1):        # right arc: centre (-hw, spring), from 60deg down to 0
+        a = math.radians(60) - math.radians(60) * k / n; pts.append((-hw + R * math.cos(a), spring + R * math.sin(a)))
+    pts.append((hw, 0.0)); return pts
+
+def build_goth28(hw=3.2, spring=8.4):
+    """K_Goth28_stone / _dark / _bone (item 7): a gothic pointed door ~8 wide x 14 high, origin = door foot centre, front toward -Z.
+    Stone: a moulded pointed archivolt (two tube rings), jambs, bases and a keystone block; dark: the recessed door leaf and the
+    skull's eye sockets; bone: a rounded skull boss on the keystone."""
+    clear_piece("K_Goth28_"); clear_piece("Q_")
+    stone, dark, bone = [], [], []
+    out = _pointed28(hw + 0.55, spring); inn = _pointed28(hw + 1.15, spring)
+    stone.append(tube_along("Q_av1", [(x, y, -0.3) for x, y in out], 0.45))
+    stone.append(tube_along("Q_av2", [(x, y, -0.1) for x, y in inn], 0.35))
+    for s in (-1, 1):
+        stone.append(rbox(f"Q_jamb{s}", 1.0, spring, 1.2, 0.12, 1, loc=(s * (hw + 0.55), spring / 2, -0.3)))
+        stone.append(rbox(f"Q_base{s}", 1.6, 1.0, 1.6, 0.12, 1, loc=(s * (hw + 0.6), 0.5, -0.3)))
+    apex = spring + math.sqrt(3) * (hw + 0.55)
+    stone.append(rbox("Q_key", 1.4, 1.9, 1.3, 0.15, 1, loc=(0, apex - 0.2, -0.45)))
+    poly = _pointed28(hw, spring)
+    bm = bmesh.new(); vs = [bm.verts.new((x, y, 0.3)) for x, y in poly]; f = bm.faces.new(vs)
+    bmesh.ops.triangulate(bm, faces=[f], quad_method='BEAUTY', ngon_method='EAR_CLIP')
+    for f in bm.faces:
+        f.normal_update()
+        if f.normal.z > 0: f.normal_flip()
+    dark.append(mesh_obj("Q_leaf", bm, False))
+    sk = lathe("Q_skull", [(0.0, -0.55), (0.42, -0.5), (0.55, -0.1), (0.58, 0.25), (0.45, 0.55), (0.0, 0.7)], seg=12)
+    sk.rotation_euler = (math.radians(90), 0, 0); sk.location = (0, apex - 0.2, -1.15); bone.append(sk)
+    for s in (-1, 1):
+        e = lathe(f"Q_eye{s}", [(0.0, 0.0), (0.16, 0.0), (0.16, 0.12), (0.0, 0.12)], seg=8)
+        e.rotation_euler = (math.radians(90), 0, 0); e.location = (s * 0.22, apex - 0.1, -1.72); dark.append(e)
+    return [merge_objs("K_Goth28_stone", stone).name, merge_objs("K_Goth28_dark", dark).name, merge_objs("K_Goth28_bone", bone).name]
+
+def build_branch28(seed=28, H=12.0):
+    """K_Branch28_wood (item 7): a bare, twisted branch silhouette ~12 studs tall: a leaning trunk that forks 3 levels deep,
+    tapering tubes, base at the origin."""
+    import random
+    clear_piece("K_Branch28"); clear_piece("Q_")
+    rnd = random.Random(seed); parts = []
+    def grow(p, d, L, r, lvl, tag):
+        pts = [p]; q = Vector(p)
+        for k in range(5):
+            d = (d + Vector((rnd.uniform(-0.25, 0.25), rnd.uniform(-0.05, 0.1), rnd.uniform(-0.25, 0.25)))).normalized()
+            q = q + d * (L / 5); pts.append(tuple(q))
+        parts.append(tube_along(f"Q_b{tag}", pts, r, res=2))
+        if lvl < 3:
+            for j in range(2 if lvl < 2 else 3):
+                nd = (d + Vector((rnd.uniform(-0.9, 0.9), rnd.uniform(0.0, 0.5), rnd.uniform(-0.9, 0.9)))).normalized()
+                grow(tuple(q), nd, L * 0.62, r * 0.6, lvl + 1, f"{tag}{j}")
+    grow((0.0, 0.0, 0.0), Vector((0.15, 1.0, 0.05)).normalized(), H * 0.45, 0.45, 0, "t")
+    return merge_objs("K_Branch28_wood", parts).name
+
+def build_scale28():
+    clear_piece("K_Scale28_"); return rbox("K_Scale28_stone", 10.0, 10.0, 10.0, 0.01, 1)
+
+R28_PREFIXES = ("K_Scale28_", "K_Stairs28_", "K_Runner28_", "K_RunY28_", "K_Boll28_", "K_Cres28_", "K_Goth28_", "K_Branch28_")
+
+def r28_info(path=None):
+    """bbox centres / sizes in authored (= Studio) coordinates and triangle counts of the pass-28 pieces."""
+    import json
+    info = {}
+    for o in bpy.data.objects:
+        if o.type == 'MESH' and o.name.startswith(R28_PREFIXES):
+            vs = [o.matrix_world @ v.co for v in o.data.vertices]
+            lo = [min(v[i] for v in vs) for i in range(3)]; hi = [max(v[i] for v in vs) for i in range(3)]
+            if o.get("zup"):
+                lo, hi = [lo[0], lo[2], -hi[1]], [hi[0], hi[2], -lo[1]]
+            tris = sum(len(p.vertices) - 2 for p in o.data.polygons)
+            info[o.name] = {"c": [round((a + b) / 2, 3) for a, b in zip(lo, hi)], "s": [round(b - a, 3) for a, b in zip(lo, hi)], "tris": tris}
+    if path: json.dump(info, open(path, "w"), indent=1)
+    return info
+
+def build_all28():
+    return {"scale": build_scale28().name, "stairs": build_stairs28(), "runner": build_runner28(), "boll": build_boll28(),
+            "cres": build_cres28(), "goth": build_goth28(), "branch": build_branch28()}
+
+def export_r28(path):
+    """Z-up + UVs (new pieces only), then export ONLY the pass-28 pieces plus the 10-stud cube."""
+    to_zup_and_uv()
+    bpy.ops.object.select_all(action='DESELECT')
+    sel = [o for o in bpy.data.objects if o.type == 'MESH' and o.name.startswith(R28_PREFIXES)]
+    for o in sel: o.select_set(True)
+    bpy.context.view_layer.objects.active = sel[0]
+    bpy.ops.export_scene.fbx(filepath=path, use_selection=True, object_types={'MESH'}, apply_unit_scale=True,
+                             mesh_smooth_type='FACE', use_mesh_modifiers=True, axis_forward='-Z', axis_up='Y')
+    return [o.name for o in sel]
