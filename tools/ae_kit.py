@@ -3584,3 +3584,204 @@ def export_r22(path):
     bpy.ops.export_scene.fbx(filepath=path, use_selection=True, object_types={'MESH'}, apply_unit_scale=True,
                              mesh_smooth_type='FACE', use_mesh_modifiers=True, axis_forward='-Z', axis_up='Y')
     return [o.name for o in sel]
+
+# ---------------------------------------------------------------- pass 23 (verify20 items 1, 2, 4, 5): 7-riser stairs of long slabs
+# with a crisp 0.15 chamfer; a one-piece runner ramp (rounded foot, thick gold rim, big low Y, one gem); a translucent curved fall
+# ribbon; the Expeditions gate front (pilasters, archivolt, gold filigree crest, door swirl, lamp posts, crystal basins); the Story
+# portal as a silver horseshoe with 7 blue gems. Riser count from the frames: the v20_c4_ref dark bands (442/500/550/600/720) against
+# flights projected through the c4 camera on our footprint (d 28-48, rise 6): 7 risers give 475/506/550/616/730 (5 in frame, as in
+# the reference), 8 give 6 in frame, 6 give 4. All pieces are authored in Studio coordinates relative to a stated origin, and
+# their bbox centres are written to kit/own/ae_kit_r23_centres.json so the placement does not depend on where the import lands.
+def build_stairs23(n=7, H=6.0, d0=28.0, run=20.0, lat0=4.3, lat1=17.7, bevel=0.15, tag="Stairs23"):
+    """K_Stairs23_stone / _riser: 4 flights (rot4) of n steps of long slabs (joints every ~6.7, offset row to row)."""
+    clear_piece(f"K_{tag}_"); clear_piece("Q_")
+    tread = run / n; rise = H / n; objs = []; W = lat1 - lat0
+    for i in range(n):
+        h = rise * (i + 1); dc = d0 + tread * i + tread / 2
+        ws = [W / 2, W / 2] if i % 2 == 0 else [W / 4, W / 2, W / 4]
+        for s in (-1, 1):
+            x = lat0
+            for w in ws:
+                objs.append(rbox(f"Q_s{i}_{s}_{x:.1f}", w - 0.06, h, tread - 0.04, bevel=bevel, segs=1, loc=(s * (x + w / 2), h / 2, -dc)))
+                x += w
+    st = merge_objs(f"K_{tag}_stone", objs, rot4=True)
+    bm = bmesh.new(); bm.from_mesh(st.data); bm2 = bm.copy()
+    def is_riser(f):
+        c = f.calc_center_median(); n_ = f.normal
+        if abs(n_.y) > 0.3: return False
+        if abs(c.x) > abs(c.z): return n_.x * (-math.copysign(1, c.x)) > 0.7
+        return n_.z * (-math.copysign(1, c.z)) > 0.7
+    bmesh.ops.delete(bm, geom=[f for f in bm.faces if is_riser(f)], context='FACES')
+    bmesh.ops.delete(bm2, geom=[f for f in bm2.faces if not is_riser(f)], context='FACES')
+    bm.to_mesh(st.data); bm.free()
+    me = bpy.data.meshes.new(f"K_{tag}_riser"); bm2.to_mesh(me); bm2.free()
+    ob = bpy.data.objects.new(f"K_{tag}_riser", me); coll().objects.link(ob)
+    return [st.name, ob.name]
+
+def loft23(name, rings, cap=True):
+    """Closed rings (same point count) lofted in order; both end rings capped with a fan."""
+    bm = bmesh.new(); vr = [[bm.verts.new(p) for p in r] for r in rings]; k = len(rings[0])
+    for a, b in zip(vr, vr[1:]):
+        for j in range(k):
+            bm.faces.new((a[j], a[(j + 1) % k], b[(j + 1) % k], b[j]))
+    if cap:
+        for r in (vr[0], vr[-1]):
+            c = bm.verts.new(sum((v.co for v in r), Vector()) / k)
+            for j in range(k): bm.faces.new((r[j], r[(j + 1) % k], c))
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+    return mesh_obj(name, bm, False)
+
+def _surf23(d, d0=17.0, dk=28.0, d1=48.4, y0=0.55, yk=0.9, y1=6.35):
+    if d <= dk: return y0 + (yk - y0) * max(0.0, d - d0) / (dk - d0)
+    return yk + (y1 - yk) * (d - dk) / (d1 - dk)
+
+def _dsamples23(d0, d1, R):
+    ds = [d0 + R * (1 - math.cos(math.radians(a))) for a in range(0, 91, 10)]
+    ds += [x for x in [28.0] + [float(v) for v in range(int(math.ceil(ds[-1])), int(d1) + 1)] if ds[-1] < x < d1]
+    return sorted(set(ds + [d1]))
+
+def runner_layer23(name, W, d0, d1, top_off, bot_mode):
+    R = W; rings = []
+    for d in _dsamples23(d0, d1, R):
+        u = min(1.0, (d - d0) / R); w = max(0.08 * W, W * math.sqrt(max(0.0, 1 - (1 - u) ** 2)))
+        t = _surf23(d) + top_off
+        if bot_mode == "floor": b = 0.0 if d <= 28.0 else _surf23(d) - 1.4
+        else: b = max(0.02, _surf23(d) - 0.35)
+        rings.append([(-w, b, -d), (w, b, -d), (w, t, -d), (-w, t, -d)])
+    return loft23(name, rings)
+
+def build_runner23(d0=17.0, d1=48.4):
+    """K_Runner23_silver / _gold / _blue / _gem: ONE ramp per flight (rot4) from a rounded foot on the floor up the stairs:
+    silver 8.6 wide, gold rim band 0.5 wide inside it, blue face, big gold Y low on the ramp, a single cyan gem at the foot."""
+    clear_piece("K_Runner23_"); clear_piece("R_")
+    sil = [runner_layer23("R_sil", 4.3, d0, d1, 0.0, "floor")]
+    gold = [runner_layer23("R_rim", 3.95, d0 + 0.35, d1, 0.08, "in")]
+    blue = [runner_layer23("R_face", 3.45, d0 + 0.85, d1 - 0.4, 0.14, "in")]
+    def path(pts): return [(x, _surf23(d) + 0.17, -d) for x, d in pts]
+    dm = 33.0; ds = d0 + 3.4
+    gold.append(tube_along("R_stem", path([(0, ds + k * (dm - ds) / 12) for k in range(13)]), 0.24))
+    for sx in (-1, 1):
+        gold.append(tube_along(f"R_arm{sx}", path([(sx * 2.55 * k / 12, dm + k * (47.6 - dm) / 12) for k in range(13)]), 0.24))
+    gem = [rbox("R_gem", 1.8, 0.55, 1.3, bevel=0.25, segs=2, loc=(0, _surf23(d0 + 2.0) + 0.2, -(d0 + 2.0)))]
+    out = []
+    for nm, lst in (("silver", sil), ("gold", gold), ("blue", blue), ("gem", gem)):
+        out.append(merge_objs(f"K_Runner23_{nm}", lst, rot4=True).name)
+    return out
+
+def build_ribbon23(W=6.0, H=40.0, rows=30, cols=8, th=0.15):
+    """K_Ribbon23_water: a fall ribbon, top at y 0, front +Z: cupped across (edges back 0.8), lip curling over from z -2.5,
+    widening 25 % and swaying slightly as it falls. Two sheets 0.15 apart (front faces +Z, back faces -Z) so it renders from
+    both sides."""
+    clear_piece("K_Ribbon23_")
+    bm = bmesh.new()
+    for side in (0, 1):
+        g = []
+        for j in range(rows + 1):
+            t = j / rows; row = []
+            for i in range(cols + 1):
+                u = -1 + 2 * i / cols; x = u * W / 2 * (1 + 0.25 * t) + 0.5 * math.sin(t * 3 * math.pi) * t
+                z = -0.8 * u * u - 2.5 * math.exp(-t * 14) - side * th
+                row.append(bm.verts.new((x, -H * t, z)))
+            g.append(row)
+        for j in range(rows):
+            for i in range(cols):
+                q = (g[j][i], g[j + 1][i], g[j + 1][i + 1], g[j][i + 1])
+                f = bm.faces.new(q); f.normal_update()
+                want = 1 if side == 0 else -1
+                if f.normal.z * want < 0: f.normal_flip()
+    return mesh_obj("K_Ribbon23_water", bm, True, 80).name
+
+def spiral23(cx, cy, z, r0, r1, turns, a0=0.0, n=40, sgn=1):
+    return [(cx + (r0 + (r1 - r0) * k / n) * math.cos(a0 + sgn * 2 * math.pi * turns * k / n),
+             cy + (r0 + (r1 - r0) * k / n) * math.sin(a0 + sgn * 2 * math.pi * turns * k / n), z) for k in range(n + 1)]
+
+def build_gate23():
+    """Expeditions gate front, origin = gate step top centre, front plane z 0, plaza toward -Z (Studio origin (0, 7.0, 84.5)).
+    The door (recessed 4.2) spans x +-5.4, y -0.5..18.1 with a round top (centre y 12.7)."""
+    clear_piece("K_Gate23_"); clear_piece("G_")
+    pale, gold, swirl, dark, glass, basin, water = [], [], [], [], [], [], []
+    for x in (-18.4, -7.6, 7.6, 18.4):
+        pale.append(rbox(f"G_pil{x}", 1.8, 20.4, 1.2, bevel=0.15, segs=1, loc=(x, 10.6, -0.6)))
+        gold.append(rbox(f"G_cap{x}", 2.5, 0.9, 1.7, bevel=0.15, segs=1, loc=(x, 21.2, -0.6)))
+        gold.append(rbox(f"G_bas{x}", 2.5, 0.8, 1.7, bevel=0.15, segs=1, loc=(x, 0.4, -0.6)))
+    def arc(r, z, n=24):
+        return [(-r, 0.0, z)] + [(r * math.cos(math.pi - math.pi * k / n), 12.7 + r * math.sin(math.pi - math.pi * k / n), z) for k in range(n + 1)] + [(r, 0.0, z)]
+    pale.append(tube_along("G_archivolt", arc(6.1, -0.35), 0.6))
+    gold.append(tube_along("G_archtrim", arc(7.0, -0.3), 0.24))
+    for s in (-1, 1):
+        gold.append(tube_along(f"G_ogee{s}", [(s * (9.2 - 8.0 * k / 16), 19.6 + 6.6 * (k / 16) ** 1.6 + 0.9 * math.sin(math.pi * k / 16), -0.5) for k in range(17)], 0.22))
+        gold.append(tube_along(f"G_scrA{s}", spiral23(s * 3.3, 22.5, -0.5, 2.1, 0.35, 1.5, math.pi / 2, 44, -s), 0.2))
+        gold.append(tube_along(f"G_scrB{s}", spiral23(s * 7.0, 21.0, -0.5, 1.3, 0.25, 1.4, math.pi / 2, 34, s), 0.17))
+        gold.append(tube_along(f"G_scrC{s}", spiral23(s * 13.0, 20.6, -0.5, 1.6, 0.3, 1.3, math.pi / 2, 36, -s), 0.18))
+    fin = lathe("G_fin", [(0, 0), (0.7, 0.0), (0.95, 0.8), (0.35, 1.7), (0.55, 2.5), (0.0, 3.6)], seg=12); fin.location = (0, 25.6, -0.5); gold.append(fin)
+    swirl.append(tube_along("G_sw1", spiral23(0.4, 9.5, 3.95, 4.1, 0.4, 2.2, 0.0, 70, 1), 0.36))
+    swirl.append(tube_along("G_sw2", spiral23(-2.4, 2.8, 3.95, 1.9, 0.3, 1.3, 1.0, 36, -1), 0.3))
+    swirl.append(tube_along("G_sw3", spiral23(2.7, 15.6, 3.95, 1.7, 0.3, 1.3, 2.0, 36, 1), 0.3))
+    for x in (-12.5, 12.5):
+        o = lathe(f"G_post{x}", [(0, 0), (0.8, 0), (0.8, 0.5), (0.35, 0.8), (0.25, 1.2), (0.25, 7.0), (0.5, 7.2), (0, 7.2)], seg=10); o.location = (x, -0.8, -3.0); dark.append(o)
+        o = lathe(f"G_lan{x}", [(0, 7.2), (0.55, 7.3), (0.62, 8.4), (0, 8.5)], seg=6); o.location = (x, -0.8, -3.0); glass.append(o)
+        o = lathe(f"G_lcap{x}", [(0, 8.45), (0.8, 8.45), (0.25, 9.3), (0, 9.7)], seg=6); o.location = (x, -0.8, -3.0); gold.append(o)
+    for x in (-21.0, 21.0):
+        o = lathe(f"G_bowl{x}", [(0, 0), (1.6, 0), (1.6, 0.3), (2.7, 0.9), (2.7, 1.35), (2.3, 1.35), (1.7, 0.75), (0, 0.75)], seg=20); o.location = (x, 4.0, 0.5); basin.append(o)
+        o = lathe(f"G_wat{x}", [(0, 0.95), (2.35, 0.95), (2.35, 1.05), (0, 1.05)], seg=20); o.location = (x, 4.0, 0.5); water.append(o)
+    out = []
+    for nm, lst in (("pale", pale), ("gold", gold), ("swirl", swirl), ("dark", dark), ("glass", glass), ("basin", basin), ("water", water)):
+        out.append(merge_objs(f"K_Gate23_{nm}", lst).name)
+    return out
+
+def build_portal23(R=7.4, foot=-8.4):
+    """Story portal: silver horseshoe band (two 0.75 tubes at r 6.9 / 7.9 = 2.5 wide, 1.5 deep) from -50 to 230 deg with legs to
+    the base, a keystone, feet, and 7 blue gems on the front. Built in XY facing +Z, then turned to face +X (Studio origin =
+    opening centre (-86.6, 16.0, 0))."""
+    clear_piece("K_Portal23_"); clear_piece("P_")
+    sil, gem = [], []
+    a0, a1 = math.radians(-50), math.radians(230)
+    for r in (R - 0.5, R + 0.5):
+        pts = [(r * math.cos(a0), foot + 0.6, 0.0)] + [(r * math.cos(a0 + (a1 - a0) * k / 40), r * math.sin(a0 + (a1 - a0) * k / 40), 0.0) for k in range(41)] + [(r * math.cos(a1), foot + 0.6, 0.0)]
+        sil.append(tube_along(f"P_band{r}", pts, 0.75))
+    sil.append(rbox("P_key", 2.4, 2.8, 2.0, bevel=0.4, segs=2, loc=(0, R + 0.4, 0)))
+    for a in (a0, a1):
+        sil.append(rbox(f"P_foot{a:.1f}", 3.2, 1.0, 2.2, bevel=0.3, segs=2, loc=(R * math.cos(a), foot + 0.5, 0)))
+    for k, ad in enumerate((57, 123, 24, 156, -9, 189)):
+        a = math.radians(ad)
+        o = rbox(f"P_gem{k}", 1.0, 1.5, 0.7, bevel=0.3, segs=2); o.location = (R * math.cos(a), R * math.sin(a), 0.75); o.rotation_euler = (0, 0, a - math.pi / 2); gem.append(o)
+    gem.append(rbox("P_gemKey", 1.3, 1.7, 0.7, bevel=0.35, segs=2, loc=(0, R + 0.4, 1.05)))
+    out = []
+    for nm, lst in (("silver", sil), ("gem", gem)):
+        ob = merge_objs(f"K_Portal23_{nm}", lst); ob.data.transform(Matrix.Rotation(math.radians(90), 4, 'Y')); out.append(ob.name)
+    return out
+
+def build_scale23():
+    clear_piece("K_Scale23_"); return rbox("K_Scale23_stone", 10.0, 10.0, 10.0, 0.01, 1)
+
+R23_PREFIXES = ("K_Scale23_", "K_Stairs23_", "K_Runner23_", "K_Ribbon23_", "K_Gate23_", "K_Portal23_")
+
+def r23_info(path=None):
+    """bbox centres / sizes in authored (= Studio) coordinates and triangle counts of the pass-23 pieces."""
+    import json
+    info = {}
+    for o in bpy.data.objects:
+        if o.type == 'MESH' and o.name.startswith(R23_PREFIXES):
+            vs = [o.matrix_world @ v.co for v in o.data.vertices]
+            lo = [min(v[i] for v in vs) for i in range(3)]; hi = [max(v[i] for v in vs) for i in range(3)]
+            if o.get("zup"):  # Z-up data back to authored Y-up: (x, y, z)_b = (x, -z, y)_a
+                lo, hi = [lo[0], lo[2], -hi[1]], [hi[0], hi[2], -lo[1]]
+            tris = sum(len(p.vertices) - 2 for p in o.data.polygons)
+            info[o.name] = {"c": [round((a + b) / 2, 3) for a, b in zip(lo, hi)], "s": [round(b - a, 3) for a, b in zip(lo, hi)], "tris": tris}
+    if path: json.dump(info, open(path, "w"), indent=1)
+    return info
+
+def build_all23():
+    return {"scale": build_scale23().name, "stairs": build_stairs23(), "runner": build_runner23(), "ribbon": build_ribbon23(),
+            "gate": build_gate23(), "portal": build_portal23()}
+
+def export_r23(path):
+    """Z-up + UVs (new pieces only), then export ONLY the pass-23 pieces plus the 10-stud cube."""
+    to_zup_and_uv()
+    bpy.ops.object.select_all(action='DESELECT')
+    sel = [o for o in bpy.data.objects if o.type == 'MESH' and o.name.startswith(R23_PREFIXES)]
+    for o in sel: o.select_set(True)
+    bpy.context.view_layer.objects.active = sel[0]
+    bpy.ops.export_scene.fbx(filepath=path, use_selection=True, object_types={'MESH'}, apply_unit_scale=True,
+                             mesh_smooth_type='FACE', use_mesh_modifiers=True, axis_forward='-Z', axis_up='Y')
+    return [o.name for o in sel]
