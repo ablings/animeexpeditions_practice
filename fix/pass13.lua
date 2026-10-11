@@ -81,6 +81,11 @@ end
 
 -- ================================================================ item 1: soft foliage swap (needs the r13 kit)
 local HAS13 = kit and kit:FindFirstChild("K_Soft13R_leaf") ~= nil
+-- pass 14: when the r14 kit (finer cards, K_Soft14*) is in Kit, every soft tree is built from it instead (same placement,
+-- same seeds), with the pass-14 leaf textures (gradient baked in per family) and a no-glint Roughness/Metalness map.
+-- The palm stays K_Soft13P (its fronds are long sprig cards and read as fronds).
+local GEN = (kit and kit:FindFirstChild("K_Soft14R_leaf")) and 14 or 13
+_G.P13_GEN = GEN
 if HAS13 then
 	-- Old trees are not destroyed: they move into ServerStorage.Pass13Old with an ObjectValue "Orig13" naming their parent,
 	-- and every run first puts them back, so this block can be re-run alone. After a full build_plaza rebuild their old
@@ -109,8 +114,19 @@ if HAS13 then
 		elseif h < 195 then return "teal" elseif h < 255 then return "blue" else return "purple" end
 	end
 	local SKY = rgb(170, 210, 235)
+	local function gen(prefix)
+		if GEN == 14 and prefix ~= "K_Soft13P" then return (prefix:gsub("Soft13", "Soft14")) end
+		return prefix
+	end
+	-- pass-14 own textures (tex/make_ae_tex14.py, uploaded with upload_image; ids in out/r14w/leaf14_assets.json)
+	local T14 = {
+		spray = { blue = "rbxassetid://118173022878419", gold = "rbxassetid://94449468583229", purple = "rbxassetid://108341914835015", grey = "rbxassetid://92399071475046" },
+		pad = { blue = "rbxassetid://128476770660093", gold = "rbxassetid://113808789273710", purple = "rbxassetid://125616853910581", grey = "rbxassetid://131174075081185" },
+		rough = "rbxassetid://79618306495225", metal = "rbxassetid://133069801476067",
+	}
 	local EXT = {}
 	local function ext(prefix) -- kit foot and height per prefix
+		prefix = gen(prefix)
 		if EXT[prefix] then return EXT[prefix] end
 		local lo, hi = math.huge, -math.huge
 		for _, k in ipairs(kit:GetChildren()) do
@@ -122,6 +138,9 @@ if HAS13 then
 	local function soft(prefix, pos, scale, fam, parent, yaw, haze)
 		-- pos = where the foot (lowest point) goes; leaves get the own leaf texture through a tinted cut-out SurfaceAppearance
 		local f = FAM[fam] or FAM.green; local dark, light = f[1], f[2]
+		prefix = gen(prefix)
+		local baked = (prefix:find("Soft14") ~= nil) and T14.spray[fam] ~= nil -- blue/gold/purple: colour is in the texture
+		if baked then dark, light = rgb(225, 225, 225), rgb(255, 255, 255) end
 		if haze then dark = dark:Lerp(SKY, haze); light = light:Lerp(SKY, haze) end
 		local e = ext(prefix)
 		local cf = CFrame.new(pos - Vector3.new(0, e[1] * scale, 0)) * CFrame.Angles(0, yaw or 0, 0)
@@ -136,7 +155,13 @@ if HAS13 then
 				else
 					c.CastShadow = false
 					local sa = Instance.new("SurfaceAppearance"); sa.AlphaMode = Enum.AlphaMode.Transparency
-					sa.ColorMap = (tok == "leafPad") and PAD or SPRIG
+					if prefix:find("Soft14") then
+						local tf = baked and fam or "grey"
+						sa.ColorMap = (tok == "leafPad") and T14.pad[tf] or T14.spray[tf]
+						sa.RoughnessMap = T14.rough; sa.MetalnessMap = T14.metal -- roughness 1, metalness 0: no glint
+					else
+						sa.ColorMap = (tok == "leafPad") and PAD or SPRIG
+					end
 					sa.Color = (tok == "leafRim") and light or dark; c.Color = sa.Color; sa.Parent = c
 				end
 				c.Parent = m
@@ -219,7 +244,8 @@ if HAS13 then
 		if F then
 			for _, x in ipairs(F:GetChildren()) do
 				if x.Name == "IslTreeBall" or x.Name == "IslPuff" then
-					soft("K_Soft13K", x.Position - Vector3.new(0, x.Size.Y * 0.4, 0), math.max(x.Size.X, x.Size.Z) / 7, "green", TREES, rng:NextNumber(0, 6.28), 0.05)
+					local m = soft("K_Soft13K", x.Position - Vector3.new(0, x.Size.Y * 0.4, 0), math.max(x.Size.X, x.Size.Z) / 7, "green", TREES, rng:NextNumber(0, 6.28), 0.05)
+					if x:GetAttribute("P14Isl") then m:SetAttribute("P14Isl", true) end -- moved with its island by pass 14
 					stash(x); tick()
 				end
 			end
@@ -254,4 +280,4 @@ if HAS13 then
 	mass("K_Soft13U", { { -62, -205 }, { -76, -190 } }, "gold", 30)
 end
 end
-return "pass13 ok"
+return "pass13 ok, gen " .. tostring(_G.P13_GEN)

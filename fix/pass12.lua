@@ -285,7 +285,9 @@ end
 do
 	local TR = Instance.new("Folder"); TR.Name = "Terraces12"; TR.Parent = P12
 	local WH, RIM, SOCK = rgb(230, 230, 225), rgb(195, 198, 195), rgb(40, 50, 60)
-	for sx = -1, 1, 2 do
+	-- pass 14 (lead's finding): the EAST terrace's rail and balusters at x 89.5-98.5, z +-14.5 were the "two white plinths
+	-- at the Raid door" in p3 (three review rounds; confirmed by raying the reviewer's pixels). Only the west one is built.
+	for sx = -1, -1, 2 do
 		local c = Vector3.new(sx * 94, 6, 0)
 		part("Terrace", Vector3.new(20, 1.2, 30), CFrame.new(c + Vector3.new(0, 0.6, 0)), WH, SM, TR)
 		part("TerraceStep", Vector3.new(2.5, 0.6, 26), CFrame.new(c + Vector3.new(-sx * 11.2, 0.3, 0)), RIM, SM, TR)

@@ -2469,3 +2469,199 @@ def export_r13(path):
     bpy.ops.export_scene.fbx(filepath=path, use_selection=True, object_types={'MESH'}, apply_unit_scale=True,
                              mesh_smooth_type='OFF', use_mesh_modifiers=True, axis_forward='-Z', axis_up='Y')
     return [o.name for o in sel]
+
+# ---------------------------------------------------------------- pass 14: finer leaf cards (verify11 item 1)
+# Round 11: the pass-13 cards read 3-5 studs with one big leaf each, so a clump broke into a few flat planes ("crumpled
+# paper"). Pass 14 keeps the method (cut-out leaf cards on clump normals) and makes it fine-grained:
+#  - cards are an ABSOLUTE 1.4-1.9 studs long in the kit (kit trees are authored near their placed height, so the Studio
+#    scale is 1.0-1.6 and a placed card is 1.5-2.5 studs), 40-80 per clump instead of 18-30;
+#  - each card carries the own leaf14_spray texture (35 leaves of 0.3-0.5 studs on a twig spray), each filler card the
+#    leaf14_pad heap (2600 leaves), colour gradient baked in (tex/make_ae_tex14.py);
+#  - 2 segments per card (8 tris with the back twin), so a 7-clump tree stays under ~4k triangles;
+#  - clump normals are biased upward (+0.35 Y) so the undersides do not sink into olive/navy shade.
+class Leaves14(Leaves13):
+    """Pass-14 card collector. The pass-13 class gave a card's back twin the SAME shading normals as its front, so seen from
+    behind (or from below a canopy) the normal pointed away from the camera and Roblox drew the face as a pale white sheen
+    (Fresnel/sky reflection) - the "white glints" of round 11 and the white planes of the first r14 test. Here each side's
+    shading normal is kept in that side's own hemisphere: n.gn >= 0.35 (gn = the side's geometric normal); the clump
+    direction survives in the tangent part, so the canopy still shades as one soft ball."""
+    @staticmethod
+    def side_n(n, gn, m=0.35):
+        n = Vector(n); d = n.dot(gn)
+        if d < m: n = n + gn * (m - d)
+        return tuple(n.normalized())
+    def quad(self, p, uv, nrm):
+        e1 = Vector(p[1]) - Vector(p[0]); e2 = Vector(p[3]) - Vector(p[0]); fn = e1.cross(e2)
+        fn = fn.normalized() if fn.length > 1e-9 else Vector((0, 1, 0))
+        i = len(self.v); self.v += [tuple(x) for x in p]; self.f.append((i, i + 1, i + 2, i + 3)); self.uv += list(uv)
+        self.n += [self.side_n(x, fn) for x in nrm]
+        j = len(self.v); self.v += [tuple(Vector(x) - fn * 0.02) for x in p]
+        self.f.append((j + 3, j + 2, j + 1, j)); self.uv += [uv[3], uv[2], uv[1], uv[0]]
+        self.n += [self.side_n(x, -fn) for x in (nrm[3], nrm[2], nrm[1], nrm[0])]
+
+def soft_normal14(p, c, fn, k=0.85, up=0.15):
+    out = Vector(p) - Vector(c); out = out.normalized() if out.length > 1e-6 else Vector((0, 1, 0))
+    if fn.dot(out) < 0: fn = -fn
+    return tuple((out * k + fn * (1 - k) + Vector((0, up, 0))).normalized())
+
+def lcard14(LV, b, d, L, W, droop=0.35, roll=0.0, segs=2, c=None, side=None):
+    b = Vector(b); d = Vector(d).normalized()
+    ref = Vector((0, 1, 0)) if abs(d.y) < 0.92 else Vector((1, 0, 0))
+    s = Vector(side).normalized() if side is not None else d.cross(ref).normalized()
+    if roll: s = Matrix.Rotation(roll, 3, d) @ s
+    down = Vector((0, -1, 0)); c = Vector(c) if c is not None else b
+    C = [b + d * (L * t) + down * (droop * L * t * t) for t in [k / segs for k in range(segs + 1)]]
+    fn = d.cross(s).normalized()
+    for k in range(segs):
+        t0, t1 = k / segs, (k + 1) / segs
+        p = [C[k] - s * W * 0.5, C[k + 1] - s * W * 0.5, C[k + 1] + s * W * 0.5, C[k] + s * W * 0.5]
+        LV.quad(p, [(0, t0), (0, t1), (1, t1), (1, t0)], [soft_normal14(q, c, fn) for q in p])
+
+def padcard14(LV, c, w, h, yaw, tilt=0.0, nc=None):
+    c = Vector(c); a = Vector((math.cos(yaw), 0, math.sin(yaw))); u = Matrix.Rotation(tilt, 3, a) @ Vector((0, 1, 0))
+    p = [c - a * w / 2 - u * h / 2, c - a * w / 2 + u * h / 2, c + a * w / 2 + u * h / 2, c + a * w / 2 - u * h / 2]
+    fn = a.cross(u).normalized(); nc = nc if nc is not None else c
+    LV.quad(p, [(0, 0), (0, 1), (1, 1), (1, 0)], [soft_normal14(q, nc, fn, 0.7) for q in p])
+
+def clump14(IN, OUT, PAD, c, r, n=52, flat=1.0, droop=0.4, pads=3, Lc=(1.4, 1.9)):
+    """Fine clump of radius r: `pads` crossed filler cards (2r across, pad heap texture) + a level card for the top, and n
+    small spray cards (Lc studs) over a Fibonacci sphere:
+      - 60% SHINGLES: lying in the shell (card normal = out of the clump), pointing down-and-around with a slight lift, so
+        the cards facing the viewer show their leaves and cover the crossed pad cards (radial cards are seen end-on there
+        and left the pads' X showing in the first pass-14 render);
+      - 40% RADIAL: pointing out of the shell and drooping, for the fuzzy outline; half of them inner/shade (IN).
+    Shingles use 1 segment (4 tris with the back twin), radial cards 2."""
+    c = Vector(c); up = Vector((0, 1, 0))
+    for k, d in enumerate(fib_dirs(n, ymin=-0.45, rnd=0.35)):
+        d = Vector((d.x, d.y * flat, d.z)).normalized()
+        L = random.uniform(*Lc)
+        if k % 5 in (0, 2, 4):  # shingle
+            tdown = (d.cross(up).cross(d)) if abs(d.y) < 0.97 else Vector((1, 0, 0))
+            tdown = (-tdown).normalized() if tdown.length > 1e-6 else Vector((1, 0, 0))
+            side_t = d.cross(tdown).normalized()
+            dirv = (tdown * 0.75 + side_t * random.uniform(-0.6, 0.6) + d * 0.3).normalized()
+            base = c + d * r * random.uniform(0.82, 0.98) - dirv * L * 0.4
+            lcard14(OUT if k % 3 else IN, base, dirv, L, L * 0.6, 0.0, random.uniform(-0.25, 0.25), 1, c, side=d.cross(dirv))
+        else:  # radial fringe
+            inner = (k % 5) == 1
+            L = L * (0.85 if inner else 1.0)
+            base = c + d * r * (random.uniform(0.45, 0.65) if inner else random.uniform(0.75, 0.95)) - d * L * 0.3
+            lcard14(IN if inner else OUT, base, d + Vector((0, 0.15, 0)), L, L * 0.55, droop * random.uniform(0.6, 1.2),
+                    random.uniform(-0.8, 0.8), 2, c)
+    for k in range(pads):
+        padcard14(PAD, c, 2.0 * r, 2.0 * r * max(0.6, flat), math.pi * k / pads + random.uniform(-0.2, 0.2), (0.4 if k % 2 else -0.4), c)
+    if pads:
+        a = Vector((1, 0, 0)); bvec = Vector((0, 0, 1)); q = c + Vector((0, 0.2 * r * flat, 0)); h = 0.85 * r
+        p = [q - a * h - bvec * h, q - a * h + bvec * h, q + a * h + bvec * h, q + a * h - bvec * h]
+        PAD.quad(p, [(0, 0), (0, 1), (1, 1), (1, 0)], [soft_normal14(x, c - Vector((0, r, 0)), Vector((0, 1, 0)), 0.6) for x in p])
+
+def ncards(r, k=3.2):
+    """Card count from the clump surface: about k cards per 10 stud^2 of shell, clamped to 40-80."""
+    return int(max(40, min(80, k * 4 * math.pi * r * r / 10)))
+
+def build_round14(tag="Soft14R", seed=141, H=20.0, R=10.0, nclus=7, cr=4.4, trunk_r=1.0):
+    random.seed(seed); clear_piece(f"K_{tag}_"); clear_piece("Q_")
+    IN, OUT, PAD = Leaves14(), Leaves14(), Leaves14()
+    top = Vector((random.uniform(-0.8, 0.8), H * 0.6, random.uniform(-0.8, 0.8)))
+    trunk = [Vector((0, -0.3, 0)), Vector((0.4, H * 0.3, 0.1)), top]
+    cents = [top + Vector((0, R * 0.5, 0))]
+    for i in range(nclus - 1):
+        a = 2 * math.pi * i / (nclus - 1) + random.uniform(-0.25, 0.25)
+        cents.append(top + Vector((R * 0.55 * math.cos(a), R * random.uniform(0.0, 0.3), R * 0.55 * math.sin(a))))
+    segs = [trunk] + [branch_to(top, c) for c in cents[1:]]
+    for c in cents: clump14(IN, OUT, PAD, c, cr * random.uniform(0.9, 1.1), ncards(cr, 3.0))
+    wood13(tag, segs, trunk_r); finish13(tag, IN, OUT, PAD)
+
+def build_cloud14(tag="Soft14C", seed=142, H=26.0, npad=5, cr=4.8, trunk_r=1.0):
+    random.seed(seed); clear_piece(f"K_{tag}_"); clear_piece("Q_")
+    IN, OUT, PAD = Leaves14(), Leaves14(), Leaves14()
+    trunk = [Vector((0, -0.3, 0)), Vector((1.8, H * 0.25, 0.6)), Vector((-0.9, H * 0.55, -0.6)), Vector((0.7, H * 0.85, 0.4))]
+    segs = [trunk]; cents = [Vector((0.7, H + 0.3, 0.4))]
+    for i in range(npad - 1):
+        t = 0.38 + 0.47 * i / (npad - 1); a = i * 2.2 + random.uniform(-0.3, 0.3)
+        b0 = Vector((0, H * t, 0)); c = Vector((6.5 * math.cos(a), H * t + 2.0, 6.5 * math.sin(a)))
+        segs.append([b0, b0.lerp(c, 0.5) + Vector((0, 1.4, 0)), c]); cents.append(c)
+    segs.append([trunk[-1], cents[0]])
+    for c in cents: clump14(IN, OUT, PAD, c, cr * random.uniform(0.9, 1.1), ncards(cr, 3.4), flat=0.55, droop=0.5)
+    wood13(tag, segs, trunk_r); finish13(tag, IN, OUT, PAD)
+
+def build_umb14(tag="Soft14U", seed=143, H=28.0, R=17.0, nclus=8, cr=5.2, trunk_r=1.6):
+    random.seed(seed); clear_piece(f"K_{tag}_"); clear_piece("Q_")
+    IN, OUT, PAD = Leaves14(), Leaves14(), Leaves14()
+    fork = Vector((0, H * 0.45, 0)); segs = [[Vector((0, -0.3, 0)), Vector((0.5, H * 0.2, 0)), fork]]
+    cents = [Vector((0, H, 0))]
+    for i in range(nclus - 1):
+        a = 2 * math.pi * i / (nclus - 1) + random.uniform(-0.2, 0.2); rr = R * random.uniform(0.5, 0.72)
+        cents.append(Vector((rr * math.cos(a), H - 1.6 + random.uniform(-1.0, 1.0), rr * math.sin(a))))
+    for k, c in enumerate(cents[1:]):
+        if k % 2 == 0: segs.append(branch_to(fork, c, 0.15))
+    segs.append([fork, cents[0]])
+    for c in cents: clump14(IN, OUT, PAD, c, cr * random.uniform(0.9, 1.1), ncards(cr, 2.0), flat=0.7, droop=0.45)
+    wood13(tag, segs, trunk_r); finish13(tag, IN, OUT, PAD)
+
+def build_wis14(tag="Soft14W", seed=144, H=20.0, R=10.0, nclus=6, cr=4.4, nhang=30, trunk_r=1.0):
+    random.seed(seed); clear_piece(f"K_{tag}_"); clear_piece("Q_")
+    IN, OUT, PAD = Leaves14(), Leaves14(), Leaves14()
+    top = Vector((0.6, H * 0.62, 0)); segs = [[Vector((0, -0.3, 0)), Vector((-0.8, H * 0.35, 0.4)), top]]
+    cents = [top + Vector((0, R * 0.4, 0))]
+    for i in range(nclus - 1):
+        a = 2 * math.pi * i / (nclus - 1) + random.uniform(-0.3, 0.3)
+        cents.append(top + Vector((R * 0.65 * math.cos(a), R * random.uniform(0.05, 0.3), R * 0.65 * math.sin(a))))
+    segs += [branch_to(top, c) for c in cents[1:]]
+    for c in cents: clump14(IN, OUT, PAD, c, cr, ncards(cr, 3.0), flat=0.8)
+    for h in range(nhang):  # hanging racemes: long narrow spray cards pointing down (they worked in round 11)
+        c = random.choice(cents); a = random.uniform(0, 2 * math.pi); rr = cr * random.uniform(0.3, 0.9)
+        b = c + Vector((rr * math.cos(a), -cr * 0.35, rr * math.sin(a)))
+        d = Vector((0.12 * math.cos(a), -1, 0.12 * math.sin(a))); L = random.uniform(3.5, 6.5)
+        lcard14(OUT, b, d, L, 1.4, 0.0, random.uniform(0, math.pi), 3, c - Vector((0, cr, 0)))
+    wood13(tag, segs, trunk_r); finish13(tag, IN, OUT, PAD)
+
+def build_cyp14(tag="Soft14Y", seed=145, H=17.0, Rb=2.6, ncard=90):
+    """Cypress: 3 tiers of 3 crossed pad cards + ncard small spray cards pointing up and out (the reference cypress is a
+    dense fine-speckle column)."""
+    random.seed(seed); clear_piece(f"K_{tag}_"); clear_piece("Q_")
+    IN, OUT, PAD = Leaves14(), Leaves14(), Leaves14()
+    segs = [[Vector((0, -0.3, 0)), Vector((0, 2.5, 0))]]
+    for t, (y0, y1, w) in enumerate(((1.2, 9.0, 2.1), (5.5, 13.5, 1.8), (9.5, H, 1.3))):
+        for k in range(3):
+            padcard14(PAD, (0, (y0 + y1) / 2, 0), w * Rb, y1 - y0, math.pi * k / 3 + t * 0.5, 0, Vector((0, (y0 + y1) / 2, 0)))
+    for i in range(ncard):
+        t = (i + 0.5) / ncard; y = 1.6 + t * (H - 2.8); r = Rb * (1 - t) ** 0.8 * 0.9 + 0.3
+        a = i * 2.39996; d = Vector((math.cos(a) * 0.7, 1.0, math.sin(a) * 0.7))
+        L = 1.7 * (1 - 0.35 * t)
+        lcard14(OUT if i % 3 else IN, (r * 0.55 * math.cos(a), y, r * 0.55 * math.sin(a)), d, L, L * 0.55, -0.05, random.uniform(-0.6, 0.6), 2, Vector((0, y, 0)))
+    wood13(tag, segs, 0.45); finish13(tag, IN, OUT, PAD)
+
+def build_clump14(tag="Soft14K", seed=148, r=4.0):
+    random.seed(seed); clear_piece(f"K_{tag}_")
+    IN, OUT, PAD = Leaves14(), Leaves14(), Leaves14()
+    clump14(IN, OUT, PAD, (0, 0, 0), r, 64, droop=0.45, pads=3)
+    finish13(tag, IN, OUT, PAD)
+
+def build_bush14(tag="Soft14B", seed=147, r=2.6):
+    random.seed(seed); clear_piece(f"K_{tag}_")
+    IN, OUT, PAD = Leaves14(), Leaves14(), Leaves14()
+    clump14(IN, OUT, PAD, (0, r * 0.55, 0), r, 44, flat=0.75, droop=0.5, Lc=(1.2, 1.6))
+    finish13(tag, IN, OUT, PAD)
+
+def build_scale14():
+    clear_piece("K_Scale14_"); return rbox("K_Scale14_stone", 10.0, 10.0, 10.0, 0.01, 1)
+
+R14_PREFIXES = ("K_Scale14_", "K_Soft14")
+SOFT14 = ("Soft14R", "Soft14C", "Soft14U", "Soft14W", "Soft14Y", "Soft14K", "Soft14B")
+
+def build_all14():
+    """The palm (Soft13P) is kept from pass 13: its fronds are long sprig cards that read as fronds, not as leaf clumps."""
+    build_scale14(); build_round14(); build_cloud14(); build_umb14(); build_wis14(); build_cyp14(); build_clump14(); build_bush14()
+    return {t: tri_count(f"K_{t}_") for t in SOFT14}
+
+def export_r14(path):
+    """Z-up, then export ONLY the pass-14 pieces plus the 10-stud cube (merged into Kit in Studio)."""
+    to_zup_and_uv()
+    bpy.ops.object.select_all(action='DESELECT')
+    sel = [o for o in bpy.data.objects if o.type == 'MESH' and o.name.startswith(R14_PREFIXES)]
+    for o in sel: o.select_set(True)
+    bpy.context.view_layer.objects.active = sel[0]
+    bpy.ops.export_scene.fbx(filepath=path, use_selection=True, object_types={'MESH'}, apply_unit_scale=True,
+                             mesh_smooth_type='OFF', use_mesh_modifiers=True, axis_forward='-Z', axis_up='Y')
+    return [o.name for o in sel]
