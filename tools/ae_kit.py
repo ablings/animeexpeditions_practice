@@ -4430,3 +4430,81 @@ def export_r34(path):
     bpy.ops.export_scene.fbx(filepath=path, use_selection=True, object_types={'MESH'}, apply_unit_scale=True,
                              mesh_smooth_type='FACE', use_mesh_modifiers=True, axis_forward='-Z', axis_up='Y')
     return [o.name for o in sel]
+
+# ============================================================================ pass 35 (notes/fix_brief35.md, verify32_plaza.md)
+# Item 1: the arch outer shoulder reads as a navy slab from the back-lit side (c2, p1, p3). Two up-facing stepped ledges swept
+# along the outermost K_Arch20 band outline (o2: quarter ellipse a 6.4 b 7.2 about (cu, cy), leg flaring 3.0 onto the stair
+# rail), on the band's extrados: each tread 1.2 deep (along the arch depth w) and each riser 0.5 proud (outward from the curve),
+# rising toward the back, small chamfers, flat-shaded treads. Same plaza frame as K_Arch20, mirrored to the 4 corners, so it is
+# placed at the K_Arch20 frame offset (authored bbox centres in r35_info).
+def _ledge35_curve(s, A=A20):
+    """o2 of side s from the top (u = s*cu) to the flared foot: (u, y, nu, ny) with the in-plane outward normal.
+    The two sides are separate sweeps (joining them would bridge the U opening between the arms)."""
+    a2, b2, f2 = A["b2"]
+    pts = _arc20(a2, b2, s, f2, A)
+    out = []
+    for i, (u, y) in enumerate(pts):
+        p0 = pts[max(i - 1, 0)]; p1 = pts[min(i + 1, len(pts) - 1)]
+        tu, ty = p1[0] - p0[0], p1[1] - p0[1]
+        nu, ny = ty, -tu
+        ru, ry = u - s * A["cu"], max(y - A["cy"], 0.0)
+        if abs(ru) < 1e-6 and ry < 1e-6: ru = s
+        if nu * ru + ny * ry < 0: nu, ny = -nu, -ny
+        m = math.hypot(nu, ny) or 1.0
+        out.append((u, y, nu / m, ny / m))
+    return out
+
+def build_ledge35(t=1.2, h=0.5, ch=0.08, A=A20):
+    clear_piece("K_ArchLedge35"); clear_piece("Q_")
+    w0 = A["Wb2"] + 0.02
+    # cross-section (d = outward offset from the outline, w = depth), closed loop: two steps rising toward the back
+    sec = [(-0.05, w0), (h - ch, w0), (h, w0 + ch), (h, w0 + t), (2 * h - ch, w0 + t), (2 * h, w0 + t + ch),
+           (2 * h, w0 + 2 * t), (-0.05, w0 + 2 * t)]
+    objs = []
+    for s in (1, -1):
+        bm = bmesh.new(); rings = []
+        for u, y, nu, ny in _ledge35_curve(s, A):
+            rings.append([bm.verts.new(P(u + nu * d, y + ny * d, w)) for d, w in sec])
+        m = len(sec)
+        for i in range(len(rings) - 1):
+            a, b = rings[i], rings[i + 1]
+            for j in range(m):
+                bm.faces.new((a[j], a[(j + 1) % m], b[(j + 1) % m], b[j]))
+        for r in (rings[0], rings[-1]): bm.faces.new(r)
+        bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+        objs.append(flat(mesh_obj(f"Q_ledge{s}", bm, False)))
+    return merge_objs("K_ArchLedge35_stone", objs, mirror4=True).name
+
+def build_scale35():
+    clear_piece("K_Scale35_"); return rbox("K_Scale35_stone", 10.0, 10.0, 10.0, 0.01, 1)
+
+R35_PREFIXES = ("K_Scale35_", "K_ArchLedge35_")
+
+def r35_info(path=None):
+    """bbox centres / sizes in authored (= Studio) coordinates and triangle counts of the pass-35 pieces (+ K_Arch20_stone)."""
+    import json
+    info = {}
+    for o in bpy.data.objects:
+        if o.type == 'MESH' and o.name.startswith(R35_PREFIXES + ("K_Arch20_stone",)):
+            vs = [o.matrix_world @ v.co for v in o.data.vertices]
+            lo = [min(v[i] for v in vs) for i in range(3)]; hi = [max(v[i] for v in vs) for i in range(3)]
+            if o.get("zup"):
+                lo, hi = [lo[0], lo[2], -hi[1]], [hi[0], hi[2], -lo[1]]
+            tris = sum(len(p.vertices) - 2 for p in o.data.polygons)
+            info[o.name] = {"c": [round((a + b) / 2, 3) for a, b in zip(lo, hi)], "s": [round(b - a, 3) for a, b in zip(lo, hi)], "tris": tris}
+    if path: json.dump(info, open(path, "w"), indent=1)
+    return info
+
+def build_all35():
+    return {"scale": build_scale35().name, "ledge": build_ledge35()}
+
+def export_r35(path):
+    """Z-up + UVs (new pieces only), then export ONLY the pass-35 pieces plus the 10-stud cube."""
+    to_zup_and_uv()
+    bpy.ops.object.select_all(action='DESELECT')
+    sel = [o for o in bpy.data.objects if o.type == 'MESH' and o.name.startswith(R35_PREFIXES)]
+    for o in sel: o.select_set(True)
+    bpy.context.view_layer.objects.active = sel[0]
+    bpy.ops.export_scene.fbx(filepath=path, use_selection=True, object_types={'MESH'}, apply_unit_scale=True,
+                             mesh_smooth_type='FACE', use_mesh_modifiers=True, axis_forward='-Z', axis_up='Y')
+    return [o.name for o in sel]
