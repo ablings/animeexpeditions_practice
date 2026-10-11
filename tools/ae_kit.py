@@ -3293,3 +3293,123 @@ def export_r19(path):
     bpy.ops.export_scene.fbx(filepath=path, use_selection=True, object_types={'MESH'}, apply_unit_scale=True,
                              mesh_smooth_type='FACE', use_mesh_modifiers=True, axis_forward='-Z', axis_up='Y')
     return [o.name for o in sel]
+
+# ---------------------------------------------------------------- pass 20 (verify17 items 2-3, 5): squat arch opening, stepped
+# outer slate bands fanning onto the stair rail, sculpted splash, squat bollard, swim ring. Read from the reference c1 frame by
+# projecting the inner-edge pixels onto the arch front plane (out/r20w/plane.py): the intrados is an ellipse hw 7.6 centred at
+# y 1.1 with rise 5.4 (top 6.5; pass 19 had 8.2), the sill under the U-handle at ~8.9 (was 9.7), the handle top ~12.4.
+A20 = dict(A19, hs_in=1.1, ry_in=5.4, top=9.0, b1=(5.2, 6.1, 1.3), b2=(6.4, 7.2, 3.0), Wb1=33.3, Wb2=33.75)
+
+def _arc20(a, b, s, flare=0.0, A=A20):
+    """_arc19 outline whose leg fans outward by 'flare' at the floor (concave, t^1.6): the band runs out onto the stair rail."""
+    n, L, cu, cy = A["n_arc"], A["n_leg"], A["cu"], A["cy"]
+    pts = [(s * (cu + a * math.sin(math.pi / 2 * k / n)), cy + b * math.cos(math.pi / 2 * k / n)) for k in range(n + 1)]
+    return pts + [(s * (cu + a + flare * (k / L) ** 1.6), cy * (1 - k / L)) for k in range(1, L + 1)]
+
+def build_arch20(A=A20):
+    """K_Arch20_stone (pale band + U arms, squat opening), _slate (two stepped bands), _gold (rims on every band edge)."""
+    clear_piece("K_Arch20_"); clear_piece("Q_")
+    G = {"stone": [], "slate": [], "gold": []}
+    W0, W1 = A["W0"], A["W1"]
+    for s in (1, -1):
+        po = _arc19(A["a_p"], A["b_p"], s, A); pi_ = _intrados19(s, A)
+        G["stone"].append(arch_band(f"Q_pale{s}", po, pi_, W0, W1))
+        a1, b1, f1 = A["b1"]; a2, b2, f2 = A["b2"]
+        o1 = _arc20(a1, b1, s, f1); o2 = _arc20(a2, b2, s, f2)
+        G["slate"].append(arch_band(f"Q_b1{s}", o1, po, A["Wb1"], W1))
+        G["slate"].append(arch_band(f"Q_b2{s}", o2, o1, A["Wb2"], W1))
+        G["gold"].append(tube_along(f"Q_gB1{s}", [P(u, y, A["Wb1"] - 0.02) for u, y in o1], 0.14))
+        G["gold"].append(tube_along(f"Q_gB2{s}", [P(u, y, A["Wb2"] - 0.02) for u, y in o2], 0.14))
+        r = A["arm_r"]; cu, ai, top = A["cu"], A["arm_in"], A["arm_top"]
+        arm = [(ai, A["top"] - 0.4), (cu, A["top"] - 0.4), (cu, top - r)]
+        arm += [(cu - r + r * math.cos(math.pi / 2 * k / 6), top - r + r * math.sin(math.pi / 2 * k / 6)) for k in range(1, 7)]
+        arm += [(ai, top)]
+        arm = [(s * u, y) for u, y in arm]
+        if s < 0: arm = arm[::-1]
+        G["stone"].append(extrude_uy(f"Q_arm{s}", arm, W0, A["Wa"]))
+        G["gold"].append(tube_along(f"Q_gIn{s}", [P(u, y, W0 - 0.02) for u, y in _intrados19(s, A, u_from=0.0)], 0.15))
+        G["gold"].append(tube_along(f"Q_gMid{s}", [P(u, y, W0 - 0.02) for u, y in po], 0.15))
+        ao = [(s * ai, A["top"]), (s * ai, top)] + [(s * (cu - r + r * math.cos(math.pi / 2 * k / 6)), top - r + r * math.sin(math.pi / 2 * k / 6)) for k in range(6, -1, -1)] + [(s * cu, A["top"] + 0.3)]
+        G["gold"].append(tube_along(f"Q_gArm{s}", [P(u, y, W0 - 0.02) for u, y in ao], 0.15))
+    crown_o = [(u, A["top"]) for u in [A["cu"] * (1 - 2 * k / 12) for k in range(13)]]
+    crown_i = [(u, A["hs_in"] + A["ry_in"] * math.sqrt(max(0.0, 1 - (u / A["hw_in"]) ** 2))) for u, _ in crown_o]
+    G["stone"].append(arch_band("Q_crown", crown_o, crown_i, W0, W1))
+    G["gold"].append(tube_along("Q_gSill", [P(u, A["top"], W0 - 0.02) for u in (-A["arm_in"], A["arm_in"])], 0.15))
+    return [merge_objs(f"K_Arch20_{k}", v, mirror4=True).name for k, v in G.items() if v]
+
+def build_splash20(H=3.0):
+    """K_Splash20_water: a sculpted 3-lobe splash ~3 tall for the fountain drum (replaces the glass sheet). A lathe profile
+    (narrow stem, swelling crown, curled lip) whose radius is modulated by 3 lobes that twist with height; the lobe tips droop
+    (the water falls back over the lip). Authored at origin, base at y 0."""
+    clear_piece("K_Splash20"); clear_piece("Q_")
+    prof = [(0.0, 0.0), (0.9, 0.0), (0.55, 0.4), (0.45, 1.0), (0.6, 1.7), (0.95, 2.3), (1.25, 2.75), (1.2, 3.0), (0.85, 2.95),
+            (0.5, 3.1), (0.2, 3.25), (0.0, 3.3)]
+    seg = 36; bm = bmesh.new(); rings = []
+    for i in range(seg):
+        a = 2 * math.pi * i / seg
+        ring = []
+        for r, y in prof:
+            t = y / 3.3
+            c3 = math.cos(3 * (a + 0.9 * t))
+            rr = r * (1.0 + 0.32 * t * c3)
+            droop = -0.35 * t * t * max(0.0, c3) if r > 0.8 else 0.0
+            ring.append(bm.verts.new((rr * math.cos(a), (y + droop) * H / 3.0, rr * math.sin(a))))
+        rings.append(ring)
+    for i in range(seg):
+        A_, B_ = rings[i], rings[(i + 1) % seg]
+        for k in range(len(prof) - 1):
+            try: bm.faces.new((A_[k], B_[k], B_[k + 1], A_[k + 1]))
+            except ValueError: pass
+    bmesh.ops.remove_doubles(bm, verts=bm.verts, dist=1e-4)
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+    return mesh_obj("K_Splash20_water", bm, True, 50).name
+
+def build_boll20():
+    """K_Boll20_base / _head (verify17 item 3): white base 3 x 1.5 x 3 with a 0.2 bevel and a chamfered top plate; squat round
+    gold head 1.5 across, ~1.05 tall, on a thin collar. Authored at origin, base at y 0."""
+    clear_piece("K_Boll20"); clear_piece("Q_")
+    base = [rbox("Q_bb", 3.0, 1.3, 3.0, 0.2, 2, loc=(0, 0.65, 0)), rbox("Q_bt", 2.5, 0.25, 2.5, 0.1, 2, loc=(0, 1.38, 0))]
+    head = [lathe("Q_hd", [(0.0, 1.5), (0.62, 1.5), (0.66, 1.6), (0.6, 1.66), (0.75, 1.72), (0.76, 1.95), (0.66, 2.25),
+                           (0.42, 2.48), (0.0, 2.56)], seg=28, smooth=True)]
+    merge_objs("K_Boll20_base", base); merge_objs("K_Boll20_head", head)
+    return ["K_Boll20_base", "K_Boll20_head"]
+
+def build_swimring20(R=1.15, r=0.42, seg=24, rs=10):
+    """K_SwimRing20_red / _white: a torus (major R, minor r) lying flat on y 0, split into 6 alternating colour segments."""
+    clear_piece("K_SwimRing20")
+    bms = {"red": bmesh.new(), "white": bmesh.new()}
+    for i in range(seg):
+        tok = "red" if (i * 6 // seg) % 2 == 0 else "white"
+        bm = bms[tok]
+        def ring(a):
+            return [bm.verts.new(((R + r * math.cos(2 * math.pi * k / rs)) * math.cos(a), r * math.sin(2 * math.pi * k / rs) + r,
+                                  (R + r * math.cos(2 * math.pi * k / rs)) * math.sin(a))) for k in range(rs)]
+        A_, B_ = ring(2 * math.pi * i / seg), ring(2 * math.pi * (i + 1) / seg)
+        for k in range(rs):
+            bm.faces.new((A_[k], A_[(k + 1) % rs], B_[(k + 1) % rs], B_[k]))
+    out = []
+    for tok, bm in bms.items():
+        bmesh.ops.remove_doubles(bm, verts=bm.verts, dist=1e-5)
+        bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+        out.append(mesh_obj(f"K_SwimRing20_{tok}", bm, True, 60).name)
+    return out
+
+def build_scale20():
+    clear_piece("K_Scale20_"); return rbox("K_Scale20_stone", 10.0, 10.0, 10.0, 0.01, 1)
+
+R20_PREFIXES = ("K_Scale20_", "K_Arch20_", "K_Splash20_", "K_Boll20_", "K_SwimRing20_")
+
+def build_all20():
+    return {"scale": build_scale20().name, "arch": build_arch20(), "splash": build_splash20(), "boll": build_boll20(),
+            "ring": build_swimring20()}
+
+def export_r20(path):
+    """Z-up + UVs (new pieces only), then export ONLY the pass-20 pieces plus the 10-stud cube."""
+    to_zup_and_uv()
+    bpy.ops.object.select_all(action='DESELECT')
+    sel = [o for o in bpy.data.objects if o.type == 'MESH' and o.name.startswith(R20_PREFIXES)]
+    for o in sel: o.select_set(True)
+    bpy.context.view_layer.objects.active = sel[0]
+    bpy.ops.export_scene.fbx(filepath=path, use_selection=True, object_types={'MESH'}, apply_unit_scale=True,
+                             mesh_smooth_type='FACE', use_mesh_modifiers=True, axis_forward='-Z', axis_up='Y')
+    return [o.name for o in sel]
