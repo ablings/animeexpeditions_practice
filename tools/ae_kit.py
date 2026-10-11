@@ -3413,3 +3413,118 @@ def export_r20(path):
     bpy.ops.export_scene.fbx(filepath=path, use_selection=True, object_types={'MESH'}, apply_unit_scale=True,
                              mesh_smooth_type='FACE', use_mesh_modifiers=True, axis_forward='-Z', axis_up='Y')
     return [o.name for o in sel]
+
+# ---------------------------------------------------------------- pass 21 (verify18 items 1, 4): chunky bevelled stair blocks
+# (6 taller steps, 4-6 stud blocks, joints offset row to row, riser = front faces only), a ruined 3-tier round-arched arcade with
+# a round tower for the island skyline, and a domed palace. The reference c2/c4 frames show ~6 steps where ours had 8, and
+# each block reads as a separate rounded stone (bevel ~0.3).
+def build_stairs21(rise=1.0, n=6, d0=28.0, run=20.0, lat0=4.3, lat1=17.7, bevel=0.3, seed=211):
+    """K_Stairs21_stone / _riser: 4 flights (rot4) of n steps; each step is a row of full-height bevelled blocks 4-6 wide
+    with offset joints. Riser = faces whose normal points back along the flight (toward the plaza)."""
+    clear_piece("K_Stairs21_"); clear_piece("Q_")
+    rnd = random.Random(seed); tread = run / n; objs = []
+    for i in range(n):
+        h = rise * (i + 1); dc = d0 + tread * i + tread / 2
+        for s in (-1, 1):
+            # widths 4-6 that fill lat0..lat1, starting with a half block on odd rows
+            W = lat1 - lat0; ws = []; x = 0.0
+            first = rnd.uniform(2.0, 3.0) if i % 2 else rnd.uniform(4.0, 6.0)
+            ws.append(first); x = first
+            while W - x > 6.0:
+                w = rnd.uniform(4.0, 6.0)
+                if W - x - w < 2.5: w = W - x - 2.5 if W - x - 2.5 >= 4.0 else w
+                ws.append(w); x += w
+            ws.append(W - x)
+            x = lat0
+            for w in ws:
+                o = rbox(f"Q_s{i}_{s}_{x:.1f}", w - 0.1, h, tread - 0.06, bevel=bevel, segs=2, loc=(s * (x + w / 2), h / 2, -dc))
+                objs.append(o); x += w
+    st = merge_objs("K_Stairs21_stone", objs, rot4=True)
+    # split risers: horizontal faces whose normal points along the flight axis, toward the centre
+    bm = bmesh.new(); bm.from_mesh(st.data); bm2 = bm.copy()
+    def is_riser(f):
+        c = f.calc_center_median(); n_ = f.normal
+        if abs(n_.y) > 0.3: return False
+        if abs(c.x) > abs(c.z): return n_.x * (-math.copysign(1, c.x)) > 0.7
+        return n_.z * (-math.copysign(1, c.z)) > 0.7
+    bmesh.ops.delete(bm, geom=[f for f in bm.faces if is_riser(f)], context='FACES')
+    bmesh.ops.delete(bm2, geom=[f for f in bm2.faces if not is_riser(f)], context='FACES')
+    bm.to_mesh(st.data); bm.free()
+    me = bpy.data.meshes.new("K_Stairs21_riser"); bm2.to_mesh(me); bm2.free()
+    ob = bpy.data.objects.new("K_Stairs21_riser", me); coll().objects.link(ob)
+    return [st.name, ob.name]
+
+def build_arcade21(W=26.0, D=3.0, seed=212):
+    """Ruined arcade for the island skyline, ~34 tall: tier 1 (13 tall, 3 wide round arches, dark back wall), tier 2 (10 tall,
+    4 arches, open to the sky), tier 3 (8 tall, broken: 2 bays of uneven height), floor slabs between tiers, and a round tower
+    (r 3.4, 40 tall, 4 levels of dark arched windows, cornices, small dome) at the +x end. Faces -Z, lateral x."""
+    clear_piece("K_Arcade21_"); clear_piece("Q_")
+    rnd = random.Random(seed); st, dk = [], []
+    tiers = [(0.0, 13.0, 3, 3.0, 0.0), (13.8, 10.0, 4, 2.0, 0.0), (24.6, 8.0, 4, 1.7, 1.0)]
+    for t, (y0, H, nb, ho, broken) in enumerate(tiers):
+        bw = W / nb; hs = H - ho - 1.6
+        inner = arch_outline(ho, hs, ho, 2, 14)
+        for b in range(nb):
+            if broken and b >= 2: continue
+            top = H if not broken else rnd.uniform(5.5, 8.0)
+            st.append(bay(f"Q_b{t}{b}", inner, bw / 2, top, hs, -D / 2, D / 2, 'z', (-W / 2 + bw * (b + 0.5), y0, 0)))
+        if t < 2: st.append(rbox(f"Q_f{t}", W + 1.0, 0.8, D + 1.0, 0.2, 1, (0, y0 + H + 0.4, 0)))
+    st.append(rbox("Q_plinth", W + 1.6, 1.0, D + 1.6, 0.2, 1, (0, 0.5, 0)))
+    dk.append(rbox("Q_back", W - 0.4, 12.4, 0.4, 0.05, 1, (0, 6.2, D / 2 + 0.3)))
+    tx = W / 2 + 3.4
+    st.append(lathe_at("Q_tw", [(0, 0), (3.9, 0), (3.9, 1.2), (3.4, 1.6), (3.4, 38.0), (0, 38.0)], (tx, 0, 0), 20, False))
+    for lv in range(4):
+        y = 6.0 + lv * 9.0
+        st.append(lathe_at(f"Q_tc{lv}", [(3.4, y + 3.6), (3.9, y + 3.8), (3.9, y + 4.4), (3.4, y + 4.6)], (tx, 0, 0), 20, False))
+        for k in range(4):
+            a = 2 * math.pi * (k + 0.5 * (lv % 2)) / 4
+            dk.append(rbox_rot(f"Q_tw{lv}{k}", 0.7, 3.6, 1.3, (tx + 3.15 * math.cos(a), y, 3.15 * math.sin(a)), -a, 0.55, 2))
+    st.append(lathe_at("Q_tdome", [(0, 38.0), (3.8, 38.0), (3.5, 40.0), (2.4, 41.6), (0, 42.4)], (tx, 0, 0), 20))
+    merge_objs("K_Arcade21_stone", st); merge_objs("K_Arcade21_darkStone", dk)
+    return ["K_Arcade21_stone", "K_Arcade21_darkStone"]
+
+def build_palace21():
+    """Domed palace ~26 tall: a 20 x 10 x 14 block with 3 round-arched windows per long side and a cornice, a drum (r 5, 3
+    tall), a big dome (r 6.2), a lantern and gold finial, and two small corner domes on drums at the front corners."""
+    clear_piece("K_Palace21_"); clear_piece("Q_")
+    st, dome, gold, dk = [], [], [], []
+    st.append(rbox("Q_blk", 20.0, 10.0, 14.0, 0.3, 1, (0, 5.0, 0)))
+    st.append(rbox("Q_cor", 21.0, 0.9, 15.0, 0.2, 1, (0, 10.4, 0)))
+    st.append(rbox("Q_base", 21.4, 1.0, 15.4, 0.2, 1, (0, 0.5, 0)))
+    for s in (-1, 1):
+        for k in (-1, 0, 1):
+            dk.append(rbox(f"Q_w{s}{k}", 2.4, 5.0, 0.4, 1.1, 3, (k * 6.0, 5.4, s * 7.0)))
+    st.append(lathe_at("Q_drum", [(0, 10.8), (5.4, 10.8), (5.0, 11.2), (5.0, 14.0), (5.5, 14.4), (0, 14.4)], (0, 0, 0), 32, False))
+    for k in range(8):
+        a = 2 * math.pi * k / 8
+        dk.append(rbox_rot(f"Q_dw{k}", 0.5, 1.8, 1.0, (4.85 * math.cos(a), 12.6, 4.85 * math.sin(a)), -a, 0.4, 2))
+    dome.append(lathe_at("Q_dome", [(0, 14.4), (5.3, 14.4), (5.2, 16.4), (4.4, 18.6), (2.8, 20.2), (0, 20.8)], (0, 0, 0), 32))
+    st.append(lathe_at("Q_lan", [(0, 20.6), (0.9, 20.6), (0.9, 22.0), (1.2, 22.2), (0, 22.6)], (0, 0, 0), 12, False))
+    gold.append(lathe_at("Q_fin", [(0, 22.5), (0.4, 22.6), (0.15, 24.6), (0, 25.0)], (0, 0, 0), 8, False))
+    for sx in (-1, 1):
+        c = (sx * 8.4, 0, -5.4)
+        st.append(lathe_at(f"Q_cd{sx}", [(0, 10.8), (1.9, 10.8), (1.9, 13.0), (0, 13.0)], c, 16, False))
+        dome.append(lathe_at(f"Q_cdm{sx}", [(0, 13.0), (2.0, 13.0), (1.6, 14.4), (0.8, 15.2), (0, 15.5)], c, 16))
+        gold.append(lathe_at(f"Q_cf{sx}", [(0, 15.4), (0.2, 15.4), (0.05, 16.6), (0, 16.7)], c, 6, False))
+    merge_objs("K_Palace21_stone", st); merge_objs("K_Palace21_dome", dome); merge_objs("K_Palace21_gold", gold)
+    merge_objs("K_Palace21_darkStone", dk)
+    return ["K_Palace21_stone", "K_Palace21_dome", "K_Palace21_gold", "K_Palace21_darkStone"]
+
+def build_scale21():
+    clear_piece("K_Scale21_"); return rbox("K_Scale21_stone", 10.0, 10.0, 10.0, 0.01, 1)
+
+R21_PREFIXES = ("K_Scale21_", "K_Stairs21_", "K_Arcade21_", "K_Palace21_")
+
+def build_all21():
+    return {"scale": build_scale21().name, "stairs": build_stairs21(), "arcade": build_arcade21(), "palace": build_palace21()}
+
+def export_r21(path):
+    """Z-up + UVs (new pieces only), then export ONLY the pass-21 pieces plus the 10-stud cube."""
+    to_zup_and_uv()
+    bpy.ops.object.select_all(action='DESELECT')
+    sel = [o for o in bpy.data.objects if o.type == 'MESH' and o.name.startswith(R21_PREFIXES)]
+    for o in sel: o.select_set(True)
+    bpy.context.view_layer.objects.active = sel[0]
+    bpy.ops.export_scene.fbx(filepath=path, use_selection=True, object_types={'MESH'}, apply_unit_scale=True,
+                             mesh_smooth_type='FACE', use_mesh_modifiers=True, axis_forward='-Z', axis_up='Y')
+    return [o.name for o in sel]
