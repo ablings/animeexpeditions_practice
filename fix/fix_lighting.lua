@@ -13,7 +13,9 @@ new("SunRaysEffect", { Intensity = 0.15, Spread = 0.7 })
 local sky = L:FindFirstChildOfClass("Sky") or Instance.new("Sky", L); sky.SunAngularSize = 10
 -- pass 5: own cloudy day skybox v2 (tex/make_ae_tex5.py: one panorama across the 4 sides, no clouds on the up face,
 -- which removes the pass-4 corner artefact), uploaded via the file server
-local SKY = { Up = 71892846199507, Dn = 78820631398749, Ft = 126129044892365, Bk = 113669221037411, Lf = 106268068341369, Rt = 97088461169211 }
+-- pass 12 (brief 12 item 1): own skybox v3 from tex/make_ae_tex12.py: direction-based (seamless across all 6 faces, clouds above 45 deg),
+-- deep cyan zenith, pale hazy horizon. The pass-5 ids were: Up 71892846199507 Dn 78820631398749 Ft 126129044892365 Bk 113669221037411 Lf 106268068341369 Rt 97088461169211
+local SKY = { Up = 105456032048472, Dn = 129874227983478, Ft = 104734433882596, Bk = 85094665805915, Lf = 135391985565861, Rt = 91935391869843 }
 for k, id in pairs(SKY) do sky["Skybox" .. k] = "rbxassetid://" .. id end
 sky.CelestialBodiesShown = true
 workspace.StreamingEnabled = false
