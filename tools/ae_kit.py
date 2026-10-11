@@ -4363,3 +4363,70 @@ def export_r28(path):
     bpy.ops.export_scene.fbx(filepath=path, use_selection=True, object_types={'MESH'}, apply_unit_scale=True,
                              mesh_smooth_type='FACE', use_mesh_modifiers=True, axis_forward='-Z', axis_up='Y')
     return [o.name for o in sel]
+
+# ============================================================================ pass 34 (notes/fix_brief34.md, verify31_plaza.md)
+# Item 1: the pass-33 inner band (56 straight Parts tilted 30 deg) read as a saw-tooth ring. One smooth band that follows the
+# K_Arch20 intrados (ellipse hw 7.6, springing 1.1, rise 5.4, legs to the floor), offset 0.2-1.2 outward from the opening edge
+# (clear of the 0.15 gold rim), 0.3 proud of the face (w 32.7 -> 33.05), chamfered front edges, smooth shaded. Same plaza frame as
+# K_Arch20 and mirrored to the 4 corners, so it is placed at the same frame offset as the arch.
+def _band34_curve(A=A20, n=28, L=4):
+    """Points along the intrados from the left foot over the crown to the right foot: (u, y, nu, ny) with the outward normal."""
+    hw, hs, ry = A["hw_in"], A["hs_in"], A["ry_in"]
+    pts = [(-hw, hs * k / L, -1.0, 0.0) for k in range(L)]
+    for k in range(2 * n + 1):
+        t = -math.pi / 2 + math.pi * k / (2 * n)
+        u, y = hw * math.sin(t), hs + ry * math.cos(t)
+        nu, ny = math.sin(t) / hw, math.cos(t) / ry
+        m = math.hypot(nu, ny); pts.append((u, y, nu / m, ny / m))
+    pts += [(hw, hs * (L - 1 - k) / L, 1.0, 0.0) for k in range(L)]
+    return pts
+
+def build_band34(d0=0.2, d1=1.2, w0=32.7, w1=33.05, ch=0.12):
+    clear_piece("K_ArchBand34"); clear_piece("Q_")
+    sec = [(d0, w1), (d0, w0 + ch), (d0 + ch, w0), (d1 - ch, w0), (d1, w0 + ch), (d1, w1)]
+    bm = bmesh.new(); rings = []
+    for u, y, nu, ny in _band34_curve():
+        rings.append([bm.verts.new(P(u + nu * d, y + ny * d, w)) for d, w in sec])
+    m = len(sec)
+    for i in range(len(rings) - 1):
+        a, b = rings[i], rings[i + 1]
+        for j in range(m):
+            bm.faces.new((a[j], a[(j + 1) % m], b[(j + 1) % m], b[j]))
+    for r in (rings[0], rings[-1]): bm.faces.new(r)
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+    o = mesh_obj("Q_band", bm, True, 50)
+    return merge_objs("K_ArchBand34_stone", [o], mirror4=True).name
+
+def build_scale34():
+    clear_piece("K_Scale34_"); return rbox("K_Scale34_stone", 10.0, 10.0, 10.0, 0.01, 1)
+
+R34_PREFIXES = ("K_Scale34_", "K_ArchBand34_")
+
+def r34_info(path=None):
+    """bbox centres / sizes in authored (= Studio) coordinates and triangle counts of the pass-34 pieces."""
+    import json
+    info = {}
+    for o in bpy.data.objects:
+        if o.type == 'MESH' and o.name.startswith(R34_PREFIXES + ("K_Arch20_stone",)):
+            vs = [o.matrix_world @ v.co for v in o.data.vertices]
+            lo = [min(v[i] for v in vs) for i in range(3)]; hi = [max(v[i] for v in vs) for i in range(3)]
+            if o.get("zup"):
+                lo, hi = [lo[0], lo[2], -hi[1]], [hi[0], hi[2], -lo[1]]
+            tris = sum(len(p.vertices) - 2 for p in o.data.polygons)
+            info[o.name] = {"c": [round((a + b) / 2, 3) for a, b in zip(lo, hi)], "s": [round(b - a, 3) for a, b in zip(lo, hi)], "tris": tris}
+    if path: json.dump(info, open(path, "w"), indent=1)
+    return info
+
+def build_all34():
+    return {"scale": build_scale34().name, "band": build_band34()}
+
+def export_r34(path):
+    """Z-up + UVs (new pieces only), then export ONLY the pass-34 pieces plus the 10-stud cube."""
+    to_zup_and_uv()
+    bpy.ops.object.select_all(action='DESELECT')
+    sel = [o for o in bpy.data.objects if o.type == 'MESH' and o.name.startswith(R34_PREFIXES)]
+    for o in sel: o.select_set(True)
+    bpy.context.view_layer.objects.active = sel[0]
+    bpy.ops.export_scene.fbx(filepath=path, use_selection=True, object_types={'MESH'}, apply_unit_scale=True,
+                             mesh_smooth_type='FACE', use_mesh_modifiers=True, axis_forward='-Z', axis_up='Y')
+    return [o.name for o in sel]
