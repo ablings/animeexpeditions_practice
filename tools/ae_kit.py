@@ -2231,3 +2231,241 @@ def export_r10(path):
     bpy.ops.export_scene.fbx(filepath=path, use_selection=True, object_types={'MESH'}, apply_unit_scale=True,
                              mesh_smooth_type='FACE', use_mesh_modifiers=True, axis_forward='-Z', axis_up='Y')
     return [o.name for o in sel]
+
+# ---------------------------------------------------------------- pass 13: soft leaf-clump foliage kit
+# Freestyle from close captures of the live reference trees (out/r13w/ref_*.jpg): a reference canopy is NOT faceted
+# geometry. It is dozens of flat cards carrying an alpha texture of many small rounded leaves, radiating out of each
+# clump and drooping, two tones per clump; the cypress is crossed vertical cards (an X shows from the side). So every
+# leaf mesh here is a set of UV-mapped double-sided cards, and Studio puts an OWN painted leaf texture on them
+# (tex/make_ae_tex13.py: leaf13_sprig on the drooping cards, leaf13_pad on the crossed filler cards) through a
+# SurfaceAppearance (AlphaMode Transparency) whose Color tints it per colour family.
+# Meshes per tree: K_<tag>_wood, K_<tag>_leaf (inner, darker tint), K_<tag>_leafRim (outer, lighter tint),
+# K_<tag>_leafPad (crossed filler cards, darker tint). Normals on every leaf card point out of its clump centre, so a
+# clump shades like one soft ball instead of a starburst of facets.
+
+class Leaves13:
+    """Collects cards for one mesh: verts, faces, per-loop UVs and per-loop custom normals."""
+    def __init__(self): self.v = []; self.f = []; self.uv = []; self.n = []
+    def quad(self, p, uv, nrm):
+        """p: 4 points, uv: 4 uvs, nrm: 4 normals; adds the face and its reversed twin 0.02 behind (Roblox culls back faces)."""
+        e1 = Vector(p[1]) - Vector(p[0]); e2 = Vector(p[3]) - Vector(p[0]); fn = e1.cross(e2)
+        fn = fn.normalized() if fn.length > 1e-9 else Vector((0, 1, 0))
+        i = len(self.v); self.v += [tuple(x) for x in p]; self.f.append((i, i + 1, i + 2, i + 3)); self.uv += list(uv); self.n += list(nrm)
+        j = len(self.v); self.v += [tuple(Vector(x) - fn * 0.02) for x in p]
+        self.f.append((j + 3, j + 2, j + 1, j)); self.uv += [uv[3], uv[2], uv[1], uv[0]]; self.n += [nrm[3], nrm[2], nrm[1], nrm[0]]
+    def obj(self, name):
+        me = bpy.data.meshes.new(name); me.from_pydata(self.v, [], self.f); me.update()
+        uvl = me.uv_layers.new(name="UVMap")
+        for k, l in enumerate(me.loops): uvl.data[k].uv = self.uv[k]
+        for p in me.polygons: p.use_smooth = True
+        try: me.normals_split_custom_set([tuple(x) for x in self.n])
+        except Exception: pass
+        o = bpy.data.objects.new(name, me); coll().objects.link(o); return o
+
+def soft_normal(p, c, fn, k=0.75):
+    """Clump normal: mostly the direction out of the clump centre c, a little of the face normal."""
+    out = Vector(p) - Vector(c); out = out.normalized() if out.length > 1e-6 else Vector((0, 1, 0))
+    if fn.dot(out) < 0: fn = -fn
+    return tuple((out * k + fn * (1 - k)).normalized())
+
+def lcard13(LV, b, d, L, W, droop=0.35, roll=0.0, segs=3, c=None):
+    """Drooping leaf card: a strip from base b along d, the centre line sagging droop*L*t^2, width W, U across (0..1),
+    V along (0 at the base, 1 at the tip). The sprig texture's stem runs up V."""
+    b = Vector(b); d = Vector(d).normalized()
+    ref = Vector((0, 1, 0)) if abs(d.y) < 0.92 else Vector((1, 0, 0))
+    s = d.cross(ref).normalized()
+    if roll: s = Matrix.Rotation(roll, 3, d) @ s
+    down = Vector((0, -1, 0)); c = Vector(c) if c is not None else b
+    C = [b + d * (L * t) + down * (droop * L * t * t) for t in [k / segs for k in range(segs + 1)]]
+    fn = d.cross(s).normalized()
+    for k in range(segs):
+        t0, t1 = k / segs, (k + 1) / segs
+        w0, w1 = W * 0.5, W * 0.5
+        p = [C[k] - s * w0, C[k + 1] - s * w1, C[k + 1] + s * w1, C[k] + s * w0]
+        LV.quad(p, [(0, t0), (0, t1), (1, t1), (1, t0)], [soft_normal(q, c, fn) for q in p])
+
+def padcard13(LV, c, w, h, yaw, tilt=0.0, nc=None):
+    """Upright filler card (pad texture) centred at c, w wide, h tall, turned yaw about Y, leaned tilt."""
+    c = Vector(c); a = Vector((math.cos(yaw), 0, math.sin(yaw))); u = Matrix.Rotation(tilt, 3, a) @ Vector((0, 1, 0))
+    p = [c - a * w / 2 - u * h / 2, c - a * w / 2 + u * h / 2, c + a * w / 2 + u * h / 2, c + a * w / 2 - u * h / 2]
+    fn = a.cross(u).normalized(); nc = nc if nc is not None else c
+    LV.quad(p, [(0, 0), (0, 1), (1, 1), (1, 0)], [soft_normal(q, nc, fn, 0.6) for q in p])
+
+def fib_dirs(n, ymin=-0.55, rnd=0.25):
+    out = []
+    for i in range(n):
+        y = 1 - (i + 0.5) / n * (1 - ymin); r = math.sqrt(max(0.0, 1 - y * y)); a = i * 2.39996 + random.uniform(-rnd, rnd)
+        out.append(Vector((r * math.cos(a), y, r * math.sin(a))))
+    return out
+
+def clump13(IN, OUT, PAD, c, r, n=28, flat=1.0, droop=0.4, Lk=1.0, pads=3):
+    """One soft clump of radius r. Its body is `pads` crossed filler cards (the round pad texture, 2r across, turned 180/pads
+    apart and leaned +-0.4 rad, so from any side at least one shows its round leafy silhouette) plus one level card
+    0.8r out for the view from above. Round it, n drooping sprig cards radiate over the whole sphere (inner 40% shorter
+    -> IN, darker; outer -> OUT, lighter) and break the outline into fuzz. flat < 1 squashes it into a pad."""
+    c = Vector(c)
+    for k, d in enumerate(fib_dirs(n, ymin=-0.35)):
+        d = Vector((d.x, d.y * flat, d.z)).normalized()
+        inner = (k % 5) in (1, 3)
+        L = r * random.uniform(0.75, 1.0) * Lk * (0.75 if inner else 1.0)
+        base = c + d * r * (0.2 if inner else 0.4)
+        lcard13(IN if inner else OUT, base, d + Vector((0, 0.1, 0)), L, L * 0.6, droop * random.uniform(0.7, 1.2), random.uniform(-0.6, 0.6), 3, c)
+    for k in range(pads):
+        padcard13(PAD, c, 2.0 * r, 2.0 * r * max(0.6, flat), math.pi * k / pads + random.uniform(-0.2, 0.2), (0.4 if k % 2 else -0.4), c)
+    if pads:
+        a = Vector((1, 0, 0)); bvec = Vector((0, 0, 1)); q = c + Vector((0, 0.15 * r, 0)); h = 0.8 * r
+        p = [q - a * h - bvec * h, q - a * h + bvec * h, q + a * h + bvec * h, q + a * h - bvec * h]
+        PAD.quad(p, [(0, 0), (0, 1), (1, 1), (1, 0)], [soft_normal(x, c - Vector((0, r, 0)), Vector((0, 1, 0)), 0.6) for x in p])
+
+def wood13(tag, segs, r0):
+    """segs: list of point-lists (trunk first, then branches at 0.45 of its radius). Merged into K_<tag>_wood."""
+    objs = []
+    for k, pts in enumerate(segs):
+        rr = r0 if k == 0 else r0 * 0.45
+        objs.append(tube_along(f"Q_w{k}", [tuple(p) for p in pts], rr, res=4))
+    objs.append(lathe_at("Q_flare", [(0, 0), (r0 * 2.3, 0), (r0 * 1.3, r0 * 1.0), (r0 * 1.0, r0 * 2.4), (0, r0 * 2.6)], (0, -0.3, 0), 8, False))
+    return merge_objs(f"K_{tag}_wood", objs)
+
+def finish13(tag, IN, OUT, PAD):
+    IN.obj(f"K_{tag}_leaf"); OUT.obj(f"K_{tag}_leafRim")
+    if PAD.f: PAD.obj(f"K_{tag}_leafPad")
+
+def branch_to(C0, c, bend=0.25):
+    m = C0.lerp(c, 0.5) + Vector((0, bend * (c - C0).length, 0))
+    return [C0, m, c.lerp(m, 0.15)]
+
+def build_round13(tag="Soft13R", seed=131, H=15.0, R=8.0, nclus=7, ncard=26, cr=3.6, trunk_r=0.8):
+    """Round broadleaf: a leaning trunk forking into branches, nclus clumps on a dome (one on top)."""
+    random.seed(seed); clear_piece(f"K_{tag}_"); clear_piece("Q_")
+    IN, OUT, PAD = Leaves13(), Leaves13(), Leaves13()
+    top = Vector((random.uniform(-0.8, 0.8), H * 0.62, random.uniform(-0.8, 0.8)))
+    trunk = [Vector((0, -0.3, 0)), Vector((0.3, H * 0.3, 0.1)), top]
+    cents = [top + Vector((0, R * 0.55, 0))]
+    for i in range(nclus - 1):
+        a = 2 * math.pi * i / (nclus - 1) + random.uniform(-0.25, 0.25)
+        cents.append(top + Vector((R * 0.6 * math.cos(a), R * random.uniform(0.0, 0.35), R * 0.6 * math.sin(a))))
+    segs = [trunk] + [branch_to(top, c) for c in cents[1:]]
+    for c in cents: clump13(IN, OUT, PAD, c, cr * random.uniform(0.9, 1.1), ncard)
+    wood13(tag, segs, trunk_r); finish13(tag, IN, OUT, PAD)
+
+def build_cloud13(tag="Soft13C", seed=132, H=17.0, npad=5, ncard=22, cr=3.8, trunk_r=0.7):
+    """Cloud / bonsai tree (the reference's blue arch tree): a twisting trunk, thin bare branches, and npad flattened
+    horizontal pads at different heights, each a squashed clump of drooping cards."""
+    random.seed(seed); clear_piece(f"K_{tag}_"); clear_piece("Q_")
+    IN, OUT, PAD = Leaves13(), Leaves13(), Leaves13()
+    trunk = [Vector((0, -0.3, 0)), Vector((1.2, H * 0.25, 0.4)), Vector((-0.6, H * 0.55, -0.4)), Vector((0.5, H * 0.85, 0.3))]
+    segs = [trunk]; cents = [Vector((0.5, H + 0.5, 0.3))]
+    for i in range(npad - 1):
+        t = 0.35 + 0.5 * i / (npad - 1); a = i * 2.2 + random.uniform(-0.3, 0.3)
+        b0 = Vector((0, H * t, 0)); c = Vector((4.5 * math.cos(a), H * t + 1.5, 4.5 * math.sin(a)))
+        segs.append([b0, b0.lerp(c, 0.5) + Vector((0, 1.0, 0)), c]); cents.append(c)
+    segs.append([trunk[-1], cents[0]])
+    for c in cents: clump13(IN, OUT, PAD, c, cr * random.uniform(0.85, 1.1), ncard, flat=0.5, droop=0.5)
+    wood13(tag, segs, trunk_r); finish13(tag, IN, OUT, PAD)
+
+def build_umb13(tag="Soft13U", seed=133, H=20.0, R=13.0, nclus=8, ncard=24, cr=4.4, trunk_r=1.2):
+    """Umbrella / acacia (the gold mass behind Summon): a thick trunk splitting into limbs that carry a wide, flat-
+    topped canopy of nclus slightly squashed clumps."""
+    random.seed(seed); clear_piece(f"K_{tag}_"); clear_piece("Q_")
+    IN, OUT, PAD = Leaves13(), Leaves13(), Leaves13()
+    fork = Vector((0, H * 0.45, 0)); segs = [[Vector((0, -0.3, 0)), Vector((0.4, H * 0.2, 0)), fork]]
+    cents = [Vector((0, H, 0))]
+    for i in range(nclus - 1):
+        a = 2 * math.pi * i / (nclus - 1) + random.uniform(-0.2, 0.2); rr = R * random.uniform(0.55, 0.8)
+        cents.append(Vector((rr * math.cos(a), H - 1.2 + random.uniform(-0.8, 0.8), rr * math.sin(a))))
+    for k, c in enumerate(cents[1:]):
+        if k % 2 == 0: segs.append(branch_to(fork, c, 0.15))
+    segs.append([fork, cents[0]])
+    for c in cents: clump13(IN, OUT, PAD, c, cr * random.uniform(0.9, 1.1), ncard, flat=0.7, droop=0.45)
+    wood13(tag, segs, trunk_r); finish13(tag, IN, OUT, PAD)
+
+def build_wis13(tag="Soft13W", seed=134, H=13.0, R=7.0, nclus=6, ncard=18, cr=3.2, nhang=26, trunk_r=0.7):
+    """Wisteria: a low spreading tree of clumps with nhang hanging strands (long sprig cards pointing nearly straight
+    down from the clump undersides: they read as racemes)."""
+    random.seed(seed); clear_piece(f"K_{tag}_"); clear_piece("Q_")
+    IN, OUT, PAD = Leaves13(), Leaves13(), Leaves13()
+    top = Vector((0.5, H * 0.65, 0)); segs = [[Vector((0, -0.3, 0)), Vector((-0.6, H * 0.35, 0.3)), top]]
+    cents = [top + Vector((0, R * 0.4, 0))]
+    for i in range(nclus - 1):
+        a = 2 * math.pi * i / (nclus - 1) + random.uniform(-0.3, 0.3)
+        cents.append(top + Vector((R * 0.7 * math.cos(a), R * random.uniform(0.05, 0.3), R * 0.7 * math.sin(a))))
+    segs += [branch_to(top, c) for c in cents[1:]]
+    for c in cents: clump13(IN, OUT, PAD, c, cr, ncard, flat=0.8)
+    for h in range(nhang):
+        c = random.choice(cents); a = random.uniform(0, 2 * math.pi); rr = cr * random.uniform(0.3, 0.9)
+        b = c + Vector((rr * math.cos(a), -cr * 0.35, rr * math.sin(a)))
+        d = Vector((0.15 * math.cos(a), -1, 0.15 * math.sin(a))); L = random.uniform(3.0, 5.5)
+        lcard13(OUT, b, d, L, 1.5, 0.0, random.uniform(0, math.pi), 3, c - Vector((0, cr, 0)))
+    wood13(tag, segs, trunk_r); finish13(tag, IN, OUT, PAD)
+
+def build_cyp13(tag="Soft13Y", seed=135, H=16.0, Rb=2.6, ncard=40):
+    """Cypress column: three crossed upright pad cards per tier in 3 overlapping tiers (the fuzzy X the reference
+    shows), plus ncard short sprig cards pointing up and out round a tapering column."""
+    random.seed(seed); clear_piece(f"K_{tag}_"); clear_piece("Q_")
+    IN, OUT, PAD = Leaves13(), Leaves13(), Leaves13()
+    segs = [[Vector((0, -0.3, 0)), Vector((0, 2.5, 0))]]
+    for t, (y0, y1, w) in enumerate(((1.2, 8.5, 2.1), (5.0, 12.5, 1.8), (9.0, H, 1.3))):
+        for k in range(3):
+            padcard13(PAD, (0, (y0 + y1) / 2, 0), w * Rb, y1 - y0, math.pi * k / 3 + t * 0.5, 0, Vector((0, (y0 + y1) / 2, 0)))
+    for i in range(ncard):
+        t = (i + 0.5) / ncard; y = 1.8 + t * (H - 3.0); r = Rb * (1 - t) ** 0.8 * 0.6 + 0.2
+        a = i * 2.39996; d = Vector((math.cos(a) * 0.6, 1.0, math.sin(a) * 0.6))
+        L = 2.6 * (1 - 0.45 * t)
+        lcard13(OUT if i % 3 else IN, (r * 0.5 * math.cos(a), y, r * 0.5 * math.sin(a)), d, L, L * 0.6, -0.05, 0, 2, Vector((0, y, 0)))
+    wood13(tag, segs, 0.45); finish13(tag, IN, OUT, PAD)
+
+def build_palm13(tag="Soft13P", seed=136, H=20.0, nf=9, FL=9.5, bend=3.0):
+    """Feather palm: ringed curved trunk; each frond is two long sprig cards in a shallow V (the sprig texture IS a
+    pinnate frond), arched up then drooping."""
+    random.seed(seed); clear_piece(f"K_{tag}_"); clear_piece("Q_")
+    IN, OUT, PAD = Leaves13(), Leaves13(), Leaves13(); wood = []
+    tp = lambda t: Vector((bend * t * t, H * t, 0.3 * bend * t * t))
+    wood.append(tube_along("Q_trunk", [tuple(tp(i / 6)) for i in range(7)], 0.65, res=4))
+    for i in range(1, 11):
+        wood.append(lathe_at(f"Q_ring{i}", [(0, -0.25), (0.85, -0.1), (0.85, 0.1), (0, 0.25)], tuple(tp(i / 11)), 6, False))
+    top = tp(1.0); wood.append(lathe_at("Q_boss", [(0, -1.0), (1.0, -0.5), (1.1, 0.3), (0.4, 0.8), (0, 0.9)], tuple(top), 8, False))
+    for i in range(nf):
+        a = 2 * math.pi * i / nf + random.uniform(-0.2, 0.2); hz = Vector((math.cos(a), 0, math.sin(a)))
+        fl = FL * random.uniform(0.85, 1.1); d = (hz + Vector((0, random.uniform(0.5, 0.9), 0))).normalized()
+        for sg in (-1, 1):
+            lcard13(OUT if i % 2 else IN, top, d, fl, 3.8, 0.85, sg * 0.6, 5, top - Vector((0, 2.0, 0)))
+    merge_objs(f"K_{tag}_wood", wood); finish13(tag, IN, OUT, PAD)
+
+def build_bush13(tag="Soft13B", seed=137, r=2.6, ncard=22):
+    """Low bush / planting clump: one squashed clump sitting on the ground (no trunk)."""
+    random.seed(seed); clear_piece(f"K_{tag}_")
+    IN, OUT, PAD = Leaves13(), Leaves13(), Leaves13()
+    clump13(IN, OUT, PAD, (0, r * 0.55, 0), r, ncard, flat=0.75, droop=0.5)
+    finish13(tag, IN, OUT, PAD)
+
+def build_clump13(tag="Soft13K", seed=138, r=4.0, ncard=30):
+    """Loose clump (no trunk), 2r across: the unit for big canopies (Story tree, gold/purple masses, island tops)."""
+    random.seed(seed); clear_piece(f"K_{tag}_")
+    IN, OUT, PAD = Leaves13(), Leaves13(), Leaves13()
+    clump13(IN, OUT, PAD, (0, 0, 0), r, ncard, droop=0.45, pads=3)
+    finish13(tag, IN, OUT, PAD)
+
+def build_scale13():
+    clear_piece("K_Scale13_"); return rbox("K_Scale13_stone", 10.0, 10.0, 10.0, 0.01, 1)
+
+R13_PREFIXES = ("K_Scale13_", "K_Soft13")
+
+def tri_count(prefix):
+    return sum(sum(len(p.vertices) - 2 for p in o.data.polygons) for o in bpy.data.objects if o.name.startswith(prefix) and o.type == 'MESH')
+
+def build_all13():
+    build_scale13(); build_round13(); build_cloud13(); build_umb13(); build_wis13(); build_cyp13(); build_palm13()
+    build_bush13(); build_clump13()
+    return {t: tri_count(f"K_{t}_") for t in ("Soft13R", "Soft13C", "Soft13U", "Soft13W", "Soft13Y", "Soft13P", "Soft13B", "Soft13K")}
+
+def export_r13(path):
+    """Z-up (+cube UVs on the wood and the cube only: leaf cards carry their own UVs), then export ONLY the pass-13 pieces
+    plus the 10-stud cube; Studio merges them into Kit. Normals are exported (custom clump normals on the leaves)."""
+    to_zup_and_uv()
+    bpy.ops.object.select_all(action='DESELECT')
+    sel = [o for o in bpy.data.objects if o.type == 'MESH' and o.name.startswith(R13_PREFIXES)]
+    for o in sel: o.select_set(True)
+    bpy.context.view_layer.objects.active = sel[0]
+    bpy.ops.export_scene.fbx(filepath=path, use_selection=True, object_types={'MESH'}, apply_unit_scale=True,
+                             mesh_smooth_type='OFF', use_mesh_modifiers=True, axis_forward='-Z', axis_up='Y')
+    return [o.name for o in sel]
