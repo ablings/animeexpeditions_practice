@@ -1,1 +1,1 @@
-{"studio_id": "8ce7b1eb-e34e-4233-8e6f-5c0f3cdd6885", "datamodel_type": "Edit", "code": "local n=0\nfor _,d in ipairs(workspace.Plaza:GetDescendants()) do\n local o=d:GetAttribute(\"T27o\") if o~=nil then d.Color=o d:SetAttribute(\"T27o\",nil) n+=1 end end\nreturn \"restored \"..n\n"}
+{"studio_id": "93d2d4f5-c7e7-40ed-bb6f-cd6824f11572", "datamodel_type": "Edit", "code": "local n=0\nfor _,d in ipairs(workspace.Plaza:GetDescendants()) do\n local o=d:GetAttribute(\"T27o\") if o~=nil then d.Color=o d:SetAttribute(\"T27o\",nil) n+=1 end end\nreturn \"restored \"..n\n"}

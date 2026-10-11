@@ -4106,3 +4106,75 @@ def export_r25(path):
     bpy.ops.export_scene.fbx(filepath=path, use_selection=True, object_types={'MESH'}, apply_unit_scale=True,
                              mesh_smooth_type='FACE', use_mesh_modifiers=True, axis_forward='-Z', axis_up='Y')
     return [o.name for o in sel]
+
+
+# ---------------------------------------------------------------- pass 27 (round-24 review, notes/fix_brief27.md)
+# Stair blocks that read as cut stone with joints from the player cameras (c4/c2/c1). Pass 24/25 had the blocks (4.5 long, 0.2
+# gaps) but the gaps only showed when tinted: the joint slab top sat 0.1 under the tread and was lit, and the 0.08 chamfer gave no
+# shading. Freestyle from the c4 picture: rounded pillow edges (bevel 0.3, 2 segments) that shade darker, 0.3 gaps, the joint slab
+# recessed 0.4 and kept BEHIND the block fronts (its own dark colour, no longer the riser), and short blocks (~3.4 / 4.5 alternating).
+# All 4 flights merged (rot4) like K_Stairs25, placed at the identity: riser ~16.4k triangles, every mesh < 20k.
+def build_stairs27(n=7, H=6.0, d0=28.0, run=20.0, lat0=4.3, lat1=17.7, bevel=0.3, segs=2, gap=0.3, recess=0.4):
+    clear_piece("K_Stairs27_"); clear_piece("Q_")
+    tread = run / n; rise = H / n; objs = []; jo = []; W = lat1 - lat0
+    for i in range(n):
+        h = rise * (i + 1); dc = d0 + tread * i + tread / 2
+        ws = [W / 4] * 4 if i % 2 == 0 else [W / 8, W / 4, W / 4, W / 4, W / 8]
+        for s in (-1, 1):
+            x = lat0
+            for w in ws:
+                objs.append(rbox(f"Q_s{i}_{s}_{x:.1f}", w - gap, h, tread - gap, bevel=min(bevel, (w - gap) / 2.5), segs=segs,
+                                 loc=(s * (x + w / 2), h / 2, -dc)))
+                x += w
+            jd = tread - gap - 0.12   # behind the block fronts
+            jo.append(rbox(f"Q_j{i}_{s}", W - 0.1, h - recess, jd, bevel=0.02, segs=1, loc=(s * (lat0 + W / 2), (h - recess) / 2, -dc)))
+    st = merge_objs("K_Stairs27_stone", objs, rot4=True)
+    bm = bmesh.new(); bm.from_mesh(st.data); bm.normal_update()
+    parts = {"stone": lambda ny: ny >= 0.92, "edge": lambda ny: 0.25 <= ny < 0.92, "riser": lambda ny: ny < 0.25}
+    names = []
+    for key, keep in parts.items():
+        b2 = bm.copy(); b2.normal_update()
+        bmesh.ops.delete(b2, geom=[f for f in b2.faces if not keep(f.normal.y)], context='FACES')
+        me = bpy.data.meshes.new(f"K_Stairs27_{key}_m"); b2.to_mesh(me); b2.free()
+        if key == "stone":
+            st.data = me
+        else:
+            ob = bpy.data.objects.new(f"K_Stairs27_{key}", me); coll().objects.link(ob)
+        names.append(f"K_Stairs27_{key}")
+    bm.free()
+    merge_objs("K_Stairs27_joint", jo, rot4=True); names.append("K_Stairs27_joint")
+    return names
+
+def build_scale27():
+    clear_piece("K_Scale27_"); return rbox("K_Scale27_stone", 10.0, 10.0, 10.0, 0.01, 1)
+
+R27_PREFIXES = ("K_Scale27_", "K_Stairs27_")
+
+def r27_info(path=None):
+    """bbox centres / sizes in authored (= Studio) coordinates and triangle counts of the pass-27 pieces."""
+    import json
+    info = {}
+    for o in bpy.data.objects:
+        if o.type == 'MESH' and o.name.startswith(R27_PREFIXES):
+            vs = [o.matrix_world @ v.co for v in o.data.vertices]
+            lo = [min(v[i] for v in vs) for i in range(3)]; hi = [max(v[i] for v in vs) for i in range(3)]
+            if o.get("zup"):
+                lo, hi = [lo[0], lo[2], -hi[1]], [hi[0], hi[2], -lo[1]]
+            tris = sum(len(p.vertices) - 2 for p in o.data.polygons)
+            info[o.name] = {"c": [round((a + b) / 2, 3) for a, b in zip(lo, hi)], "s": [round(b - a, 3) for a, b in zip(lo, hi)], "tris": tris}
+    if path: json.dump(info, open(path, "w"), indent=1)
+    return info
+
+def build_all27():
+    return {"scale": build_scale27().name, "stairs": build_stairs27()}
+
+def export_r27(path):
+    """Z-up + UVs (new pieces only), then export ONLY the pass-27 pieces plus the 10-stud cube."""
+    to_zup_and_uv()
+    bpy.ops.object.select_all(action='DESELECT')
+    sel = [o for o in bpy.data.objects if o.type == 'MESH' and o.name.startswith(R27_PREFIXES)]
+    for o in sel: o.select_set(True)
+    bpy.context.view_layer.objects.active = sel[0]
+    bpy.ops.export_scene.fbx(filepath=path, use_selection=True, object_types={'MESH'}, apply_unit_scale=True,
+                             mesh_smooth_type='FACE', use_mesh_modifiers=True, axis_forward='-Z', axis_up='Y')
+    return [o.name for o in sel]

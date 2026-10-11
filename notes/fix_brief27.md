@@ -5,12 +5,12 @@ PICTURES only. Do not read part positions, sizes or CFrames from the reference p
 `ae_reference.blend` (that is the export of the reference: off limits for building). Scale comes from the pictures
 and the player (5 studs tall).
 
-## What you have (Shadow PC)
-- All paths are under `C:/Users/Shadow/Documents/animeexp_practice` (ignore any `C:/Users/aroki`).
-- Reference: the live reference place IS open on this PC: studio `1c7bc18a-1703-489c-bdcf-e4ced52e2a1b`, read-only,
+## What you have (main PC, 2026-10-11 overnight)
+- All paths are under `C:/Users/aroki/Documents/animeexp_practice` (main PC).
+- Reference: the live reference place IS open on this PC: studio `97946bf6-0aa4-48bc-9024-a884610ec79c`, read-only,
   **screen_capture only** (never execute_luau there, never read part positions). Capture it from any camera you like to see a
   piece from more angles. The round-24 judged frames are in `out/verify24/v24_<cam>_ref.jpg` / `_rep.jpg`.
-- Practice place: studio `8ce7b1eb-e34e-4233-8e6f-5c0f3cdd6885` (`AE_practice.rbxl`). execute_luau and screen_capture allowed
+- Practice place: studio `93d2d4f5-c7e7-40ed-bb6f-cd6824f11572` (`AE_practice.rbxl`). execute_luau and screen_capture allowed
   (MCP tools `mcp__Roblox_Studio__*` via ToolSearch, or `mcpcli.py`).
 - Own kit generator: `tools/ae_kit.py` (run in Blender via the Blender MCP: open `ae_kit.blend`, `runpy.run_path`).
   Helpers: lathe, lathe_solid, rbox, tube_along, extrude_outline, flip_toward_axis, to_zup_and_uv. Author Y-up, then
@@ -20,9 +20,18 @@ and the player (5 studs tall).
   tell the lead, who imports it; then continue with placement. Import uploads the meshes to the signed-in Roblox account
   (Edward's new account from pass 8 on; earlier kits belong to the original account: that is expected).
 - Placement: `fix/build_plaza.lua` (idempotent, own layout table): make it look for `ae_kit_r27` as well. Run it with
-  `cd C:/Users/Shadow/Documents/animeexp_practice && PYTHONIOENCODING=utf-8 python mcpcli.py call execute_luau <json>`.
+  `cd C:/Users/aroki/Documents/animeexp_practice && PYTHONIOENCODING=utf-8 python mcpcli.py call execute_luau <json>`.
 - Lighting: `fix/fix_lighting.lua` (the reference's settings). Re-run it after rebuilding.
-- Captures: `CAMS=cams_practice.json python capture_set2.py 8ce7b1eb-e34e-4233-8e6f-5c0f3cdd6885 r27 out/r27`.
+- Captures: `CAMS=cams_practice.json python capture_set2.py 93d2d4f5-c7e7-40ed-bb6f-cd6824f11572 r27 out/r27`.
+
+## Main PC notes (2026-10-11)
+- The round-24 judged frames (`out/verify24/`) stayed on the Shadow PC. Recapture the reference frames you need from the reference
+  studio with the same cameras (`cams.json` for the reference, `cams_practice.json` for the practice place; `capture_set2.py` with
+  CAMS=...). The reference set from earlier is in `out/refset/`.
+- Blender 5.2 is open on `ae_kit.blend` with the MCP add-on (port 9876). File server `tools/serve.py` is running on 8767.
+- Pass 27 was started on the Shadow PC and stopped before the kit export: `fix/pass27.lua`, `tex/make_ae_tex27.py`, `tex/leaf27/`
+  and `out/r27w/` are its partial work, NOT applied in the saved place (which is pass 26). Reuse what is sound.
+- Studio here is signed in to the original account; Import 3D uploads the r27 kit under it. That is expected.
 
 ## Inputs
 `notes/verify24_plaza.md`: round-24 review (8.83/10, +0.16; eight cameras at 9, p4/p6/p8/c4 at 8.5). Every colour target comes with
