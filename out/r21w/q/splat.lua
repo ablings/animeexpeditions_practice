@@ -1,0 +1,3 @@
+local s={} for _,d in workspace.Plaza.Pass19:GetChildren() do if d.Name:find('Splat') then table.insert(s,d.Name..' '..string.format('(%d,%d,%d)',d.Color.R*255,d.Color.G*255,d.Color.B*255)..' '..d.Material.Name..' T'..d.Transparency..' at '..string.format('%.0f,%.1f,%.0f',d.Position.X,d.Position.Y,d.Position.Z)) end end
+for _,n in ipairs({'Splats17'}) do local f=workspace.Plaza.Pass17[n] for _,d in f:GetDescendants() do if d:IsA('BasePart') and d.Transparency<1 then table.insert(s,'P17 '..d.Name..' '..string.format('(%d,%d,%d)',d.Color.R*255,d.Color.G*255,d.Color.B*255)..' T'..d.Transparency..' at '..string.format('%.0f,%.1f,%.0f',d.Position.X,d.Position.Y,d.Position.Z)) end end end
+return table.concat(s,'\n')

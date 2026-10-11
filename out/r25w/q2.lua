@@ -1,0 +1,10 @@
+local P = workspace.Plaza
+local t = {}
+local r = P.Pass24:FindFirstChild("Stairs24_riser"); table.insert(t, "riser " .. tostring(r.Color) .. " " .. r.Material.Name)
+for _, d in ipairs(P.Pass15.K_Skull15:GetChildren()) do table.insert(t, d.Name .. " " .. d.ClassName .. " " .. tostring(d:IsA("BasePart") and d.Color)) end
+local n = 0; local ys = {}
+for _, d in ipairs(P.Zoning:GetDescendants()) do if d:IsA("BasePart") and d.Position.X > 50 and d.Position.Z > 15 and d.Position.Z < 90 then n += 1; if n < 25 then table.insert(ys, string.format("%s %s %s (%.0f,%.1f,%.0f) s(%.0f,%.1f,%.0f)", d.Name, d.Material.Name, tostring(d.Color), d.Position.X, d.Position.Y, d.Position.Z, d.Size.X, d.Size.Y, d.Size.Z)) end end end
+table.insert(t, "SE zoning " .. n); for _, s in ipairs(ys) do table.insert(t, s) end
+local m = P.Pass11.Raid11; local cf, sz = m:GetBoundingBox(); table.insert(t, string.format("Raid11 c(%.0f,%.0f,%.0f) s(%.0f,%.0f,%.0f)", cf.X, cf.Y, cf.Z, sz.X, sz.Y, sz.Z))
+for _, d in ipairs(m:GetChildren()) do if d:IsA("BasePart") then table.insert(t, string.format("  %s (%.0f,%.0f,%.0f) s(%.0f,%.0f,%.0f)", d.Name, d.Position.X, d.Position.Y, d.Position.Z, d.Size.X, d.Size.Y, d.Size.Z)) end end
+return table.concat(t, "\n")

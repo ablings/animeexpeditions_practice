@@ -1,0 +1,5 @@
+local cnt={} 
+for _,d in workspace.Plaza.Pass13.Trees13:GetDescendants() do if d.Name=='K_Soft15K_leaf' and d.Color.R>0.8 then local sa=d:FindFirstChildOfClass('SurfaceAppearance') local p=d.Position local side=p.X<-45 and 'W' or (p.X>45 and 'E' or (p.Z<0 and 'N' or 'S')) local k=side..' '..sa.ColorMap..(p.Y>40 and ' high' or '') cnt[k]=(cnt[k] or 0)+1 end end
+local s={} for k,v in cnt do table.insert(s,k..' x'..v) end table.sort(s)
+local b=workspace.Plaza.Pass16.West16:FindFirstChild('K_Soft15B') local l=b:FindFirstChild('K_Soft15B_leaf') table.insert(s,'West16 B '..l:FindFirstChildOfClass('SurfaceAppearance').ColorMap)
+return table.concat(s,'\n')

@@ -1,0 +1,1 @@
+local s={} for _,n in ipairs({'K_Stairs21_stone','K_Stairs21_riser','K_Arcade21_stone','K_Palace21_dome'}) do table.insert(s,n..' '..tostring(game.ServerStorage.Kit:FindFirstChild(n)~=nil)) end return table.concat(s,', ')..' | ae_kit_r21 in ws: '..tostring(workspace:FindFirstChild('ae_kit_r21')~=nil)

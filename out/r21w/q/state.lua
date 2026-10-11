@@ -1,0 +1,1 @@
+local t={} for _,c in workspace:GetChildren() do table.insert(t,c.Name) end return #workspace.Plaza:GetDescendants()..' | '..table.concat(t,',')..' | P21 '..tostring(workspace.Plaza:FindFirstChild('Pass21')~=nil)

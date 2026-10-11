@@ -1,0 +1,3 @@
+local cnt={} local ex={}
+for _,d in workspace.Plaza:GetDescendants() do if d:IsA('BasePart') and d.Transparency<1 and d.Position.X<-25 and d.Position.Y<60 then local c=d.Color if c.B>c.R+0.15 and c.B>c.G+0.08 then local m=d.Parent local key=m:GetFullName():gsub('Workspace.Plaza.',''):gsub('%.[^%.]+$','')..'|'..m.Name..'/'..d.Name cnt[key]=(cnt[key] or 0)+1 ex[key]=string.format('%.0f,%.0f,%.0f sz%.0f',d.Position.X,d.Position.Y,d.Position.Z,d.Size.Magnitude) end end end
+local s={} for k,v in cnt do table.insert(s,k..' x'..v..' e.g. '..ex[k]) end table.sort(s) return table.concat(s,'\n')
