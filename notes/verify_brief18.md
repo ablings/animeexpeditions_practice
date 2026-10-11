@@ -6,8 +6,8 @@ rebuild from reference images: silhouette, proportion and layout, colour and mat
 player would notice. Not pixel matching.
 
 ## Studios
-- REFERENCE (read-only): studio_id `12bdc68f-9f23-444b-9718-8043ca761440`. screen_capture only.
-- PRACTICE: studio_id `ae13592b-5ca7-43d3-91a6-9135c14250eb`. screen_capture only.
+- REFERENCE (read-only): studio_id `1c7bc18a-1703-489c-bdcf-e4ced52e2a1b`. screen_capture only.
+- PRACTICE: studio_id `8ce7b1eb-e34e-4233-8e6f-5c0f3cdd6885`. screen_capture only.
 Load `mcp__Roblox_Studio__screen_capture` with ToolSearch. Never run code; never modify anything. Capture each camera 2-3 times
 and judge the last frame. Save nothing to the reference; judge from your own captures of both studios.
 

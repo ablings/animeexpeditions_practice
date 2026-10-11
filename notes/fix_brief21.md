@@ -7,10 +7,10 @@ and the player (5 studs tall).
 
 ## What you have (Shadow PC)
 - All paths are under `C:/Users/Shadow/Documents/animeexp_practice` (ignore any `C:/Users/aroki`).
-- Reference: the live reference place IS open on this PC: studio `12bdc68f-9f23-444b-9718-8043ca761440`, read-only,
+- Reference: the live reference place IS open on this PC: studio `1c7bc18a-1703-489c-bdcf-e4ced52e2a1b`, read-only,
   **screen_capture only** (never execute_luau there, never read part positions). Capture it from any camera you like to see a
   piece from more angles. The round-18 judged frames are in `out/verify18/v18_<cam>_ref.jpg` / `_rep.jpg`.
-- Practice place: studio `ae13592b-5ca7-43d3-91a6-9135c14250eb` (`AE_practice.rbxl`). execute_luau and screen_capture allowed
+- Practice place: studio `8ce7b1eb-e34e-4233-8e6f-5c0f3cdd6885` (`AE_practice.rbxl`). execute_luau and screen_capture allowed
   (MCP tools `mcp__Roblox_Studio__*` via ToolSearch, or `mcpcli.py`).
 - Own kit generator: `tools/ae_kit.py` (run in Blender via the Blender MCP: open `ae_kit.blend`, `runpy.run_path`).
   Helpers: lathe, lathe_solid, rbox, tube_along, extrude_outline, flip_toward_axis, to_zup_and_uv. Author Y-up, then
@@ -22,7 +22,7 @@ and the player (5 studs tall).
 - Placement: `fix/build_plaza.lua` (idempotent, own layout table): make it look for `ae_kit_r21` as well. Run it with
   `cd C:/Users/Shadow/Documents/animeexp_practice && PYTHONIOENCODING=utf-8 python mcpcli.py call execute_luau <json>`.
 - Lighting: `fix/fix_lighting.lua` (the reference's settings). Re-run it after rebuilding.
-- Captures: `CAMS=cams_practice.json python capture_set2.py ae13592b-5ca7-43d3-91a6-9135c14250eb r21 out/r21`.
+- Captures: `CAMS=cams_practice.json python capture_set2.py 8ce7b1eb-e34e-4233-8e6f-5c0f3cdd6885 r21 out/r21`.
 
 ## Inputs
 `notes/verify18_plaza.md`: round-18 review (7.83/10, +0.08). Every colour target comes with its frame and pixel box: re-sample each
