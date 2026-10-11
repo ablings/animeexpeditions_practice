@@ -3185,3 +3185,111 @@ def export_r18(path):
     bpy.ops.export_scene.fbx(filepath=path, use_selection=True, object_types={'MESH'}, apply_unit_scale=True,
                              mesh_smooth_type='FACE', use_mesh_modifiers=True, axis_forward='-Z', axis_up='Y')
     return [o.name for o in sel]
+
+# ---------------------------------------------------------------- pass 19: narrower, darker arch (verify16 item 1). Read from the
+# reference c1 frame (camera 16 studs in front of the arch face, ~35.4 px/stud): a pale front band (intrados to ~u 8.1 at the
+# legs, top ~9.7) whose crest rises into a U-handle (arms u 2.2..3.9, top ~12.5, rounded outer corners), and OUTSIDE it one
+# dark-slate band (~1 thick, outer edge ~u 9.2 at the legs) with one groove, gold rims on every edge. The old hero arch band,
+# crest and their gold ribbons are cut out of K_Hero17 (-> K_Hero19); the inner rib steps (K_Hero_rib / darkStone) stay as the lip.
+SQ2 = math.sqrt(2.0)
+def _uwy(co_world_b):
+    """Blender Z-up world co -> (u, w, y) folded into the NE corner frame."""
+    X, Y, Z = co_world_b.x, co_world_b.z, -co_world_b.y
+    Xp, Zp = abs(X), -abs(Z)
+    return ((Xp + Zp) / SQ2, (Xp - Zp) / SQ2, Y)
+
+def build_hero19():
+    """K_Hero19_stone / _gold: K_Hero17 with the arch band (Q_arch), the crest (Q_crest) and the arch/crest gold ribbons deleted."""
+    def dead_stone(f, M):
+        P3 = [_uwy(M @ v.co) for v in f.verts]
+        if not all(32.9 <= w <= 39.6 and abs(u) <= 10.05 and y >= -0.01 for u, w, y in P3): return False
+        if all(y <= 6.001 for u, w, y in P3) and min(w for u, w, y in P3) >= 33.99: return False   # corner block
+        if any(math.hypot(u, w - 33.1) < 5.6 and y < 2.7 for u, w, y in P3): return False            # basin
+        return True
+    def dead_gold(f, M):
+        P3 = [_uwy(M @ v.co) for v in f.verts]
+        return all(32.5 <= w <= 37.5 and abs(u) <= 10.8 and y >= 0.3 for u, w, y in P3)
+    out = {}
+    for tok, fn in (("stone", dead_stone), ("gold", dead_gold)):
+        src = bpy.data.objects["K_Hero17_" + tok]; name = "K_Hero19_" + tok
+        clear_piece(name)
+        me = src.data.copy(); me.name = name
+        ob = bpy.data.objects.new(name, me); ob["zup"] = 1; coll().objects.link(ob); ob.matrix_world = src.matrix_world.copy()
+        M = src.matrix_world
+        bm = bmesh.new(); bm.from_mesh(me)
+        dead = [f for f in bm.faces if fn(f, M)]
+        bmesh.ops.delete(bm, geom=dead, context='FACES')
+        bmesh.ops.delete(bm, geom=[v for v in bm.verts if not v.link_faces], context='VERTS')
+        bm.to_mesh(me); bm.free(); out[name] = len(dead)
+    return out
+
+A19 = dict(hw_in=7.6, hs_in=4.2, ry_in=4.0, cu=3.9, cy=4.4, a_p=4.4, b_p=5.3, a_d=5.3, b_d=6.2, top=9.7,
+           arm_in=2.2, arm_top=12.5, arm_r=1.1, W0=33.0, W1=39.5, Wd=33.3, Wg=33.65, Wa=36.5, n_arc=14, n_leg=3, n_pre=4)
+
+def _arc19(a, b, s, A=A19):
+    """Outer-edge arc of side s: quarter ellipse centred (s*cu, cy) from the top (u = s*cu) to (s*(cu+a), cy), then the leg."""
+    n, L, cu, cy = A["n_arc"], A["n_leg"], A["cu"], A["cy"]
+    pts = [(s * (cu + a * math.sin(math.pi / 2 * k / n)), cy + b * math.cos(math.pi / 2 * k / n)) for k in range(n + 1)]
+    return pts + [(s * (cu + a), cy * (1 - k / L)) for k in range(1, L + 1)]
+
+def _intrados19(s, A=A19, u_from=None):
+    """Intrados (in1: hw 7.6, springing 4.2, rise 4.0) from u_from (default the arm line u = cu) down the side s, same count as _arc19."""
+    n, L, hw, hs, ry = A["n_arc"], A["n_leg"], A["hw_in"], A["hs_in"], A["ry_in"]
+    t0 = math.asin(min(1.0, (A["cu"] if u_from is None else u_from) / hw))
+    pts = []
+    for k in range(n + 1):
+        t = t0 + (math.pi / 2 - t0) * k / n
+        pts.append((s * hw * math.sin(t), hs + ry * math.cos(t)))
+    return pts + [(s * hw, hs * (1 - k / L)) for k in range(1, L + 1)]
+
+def build_arch19(A=A19):
+    """K_Arch19_stone (pale band + U arms), _slate (outer band, 2 strips), _groove, _gold (rims). Y-up, NE corner, mirrored to 4."""
+    clear_piece("K_Arch19_"); clear_piece("Q_")
+    G = {"stone": [], "slate": [], "groove": [], "gold": []}
+    W0, W1 = A["W0"], A["W1"]
+    for s in (1, -1):
+        po = _arc19(A["a_p"], A["b_p"], s); pi_ = _intrados19(s)
+        G["stone"].append(arch_band(f"Q_pale{s}", po, pi_, W0, W1))
+        do = _arc19(A["a_d"], A["b_d"], s)
+        lerp = lambda f: [(p[0] + (q[0] - p[0]) * f, p[1] + (q[1] - p[1]) * f) for p, q in zip(po, do)]
+        for f0, f1, tok, w in ((0.0, 0.42, "slate", A["Wd"]), (0.42, 0.58, "groove", A["Wg"]), (0.58, 1.0, "slate", A["Wd"])):
+            G[tok].append(arch_band(f"Q_dk{s}_{f0}", lerp(f1), lerp(f0), w, W1))
+        # U-handle arm: u arm_in..cu, from inside the band up to arm_top, outer top corner rounded (radius arm_r)
+        r = A["arm_r"]; cu, ai, top = A["cu"], A["arm_in"], A["arm_top"]
+        arm = [(ai, top - 3.9), (cu, top - 3.9), (cu, top - r)]
+        arm += [(cu - r + r * math.cos(math.pi / 2 * k / 6), top - r + r * math.sin(math.pi / 2 * k / 6)) for k in range(1, 7)]
+        arm += [(ai, top)]
+        arm = [(s * u, y) for u, y in arm]
+        if s < 0: arm = arm[::-1]
+        G["stone"].append(extrude_uy(f"Q_arm{s}", arm, W0, A["Wa"]))
+        # gold rims (front edges): intrados (from the crown), pale/slate boundary, slate outer edge, arm outline
+        G["gold"].append(tube_along(f"Q_gIn{s}", [P(u, y, W0 - 0.02) for u, y in _intrados19(s, u_from=0.0)], 0.15))
+        G["gold"].append(tube_along(f"Q_gMid{s}", [P(u, y, W0 - 0.02) for u, y in po], 0.15))
+        G["gold"].append(tube_along(f"Q_gOut{s}", [P(u, y, A["Wd"] - 0.02) for u, y in do], 0.15))
+        ao = [(s * ai, A["top"]), (s * ai, top)] + [(s * (cu - r + r * math.cos(math.pi / 2 * k / 6)), top - r + r * math.sin(math.pi / 2 * k / 6)) for k in range(6, -1, -1)] + [(s * cu, A["top"] + 0.3)]
+        G["gold"].append(tube_along(f"Q_gArm{s}", [P(u, y, W0 - 0.02) for u, y in ao], 0.15))
+    # pale band crown between the arms (u -cu..cu, from the intrados crown to the band top)
+    crown_o = [(u, A["top"]) for u in [A["cu"] * (1 - 2 * k / 12) for k in range(13)]]
+    crown_i = [(u, A["hs_in"] + A["ry_in"] * math.sqrt(max(0.0, 1 - (u / A["hw_in"]) ** 2))) for u, _ in crown_o]
+    G["stone"].append(arch_band("Q_crown", crown_o, crown_i, W0, W1))
+    G["gold"].append(tube_along("Q_gSill", [P(u, A["top"], W0 - 0.02) for u in (-A["arm_in"], A["arm_in"])], 0.15))
+    return [merge_objs(f"K_Arch19_{k}", v, mirror4=True).name for k, v in G.items() if v]
+
+def build_scale19():
+    clear_piece("K_Scale19_"); return rbox("K_Scale19_stone", 10.0, 10.0, 10.0, 0.01, 1)
+
+R19_PREFIXES = ("K_Scale19_", "K_Hero19_", "K_Arch19_")
+
+def build_all19():
+    build_scale19(); h = build_hero19(); a = build_arch19(); return {"hero19_deleted": h, "arch": a}
+
+def export_r19(path):
+    """Z-up + UVs (new pieces only), then export ONLY the pass-19 pieces plus the 10-stud cube."""
+    to_zup_and_uv()
+    bpy.ops.object.select_all(action='DESELECT')
+    sel = [o for o in bpy.data.objects if o.type == 'MESH' and o.name.startswith(R19_PREFIXES)]
+    for o in sel: o.select_set(True)
+    bpy.context.view_layer.objects.active = sel[0]
+    bpy.ops.export_scene.fbx(filepath=path, use_selection=True, object_types={'MESH'}, apply_unit_scale=True,
+                             mesh_smooth_type='FACE', use_mesh_modifiers=True, axis_forward='-Z', axis_up='Y')
+    return [o.name for o in sel]
