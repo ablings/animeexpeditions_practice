@@ -21,9 +21,8 @@ workspace.StreamingEnabled = false
 -- pass 6: the pass-5 Ambient/OutdoorAmbient (110,115,130) and Contrast 0.22 override is REMOVED: it was darker than the
 -- reference's own values (Ambient 102,74,101 / OutdoorAmbient 169,165,184 / Contrast 0.12) and turned every shaded
 -- gate face navy. The reference values set at the top now stand; only a warm tint is kept.
-local cc = L:FindFirstChildOfClass("ColorCorrectionEffect"); cc.TintColor = Color3.fromRGB(255, 248, 238)
-local bl = L:FindFirstChildOfClass("BloomEffect"); bl.Intensity = 0.5; bl.Threshold = 1.1
-local at = L:FindFirstChildOfClass("Atmosphere"); at.Density = 0.26; at.Haze = 0.5; at.Color = Color3.fromRGB(205, 212, 215); at.Offset = 0.1 -- pass 6: less blue haze; pass 8: haze 1.2 -> 0.5, greyer, so the far islands read grey (137,148,145) not blue
+-- pass 11 (lead's note): the pass 6-8 drift (warm TintColor, Bloom 0.5/1.1, Atmosphere 0.26/Haze 0.5/Offset 0.1/greyer colour)
+-- is REMOVED: Atmosphere, Bloom, ColorCorrection and SunRays stay exactly as notes/settings_ref.txt records (set above).
 -- pass 5: the uploaded skybox clouds did not show in the captures, so add Roblox's own volumetric Terrain clouds too
 local cl = workspace.Terrain:FindFirstChildOfClass("Clouds") or Instance.new("Clouds", workspace.Terrain)
 cl.Cover = 0.55; cl.Density = 0.55; cl.Color = Color3.fromRGB(255, 255, 255)
