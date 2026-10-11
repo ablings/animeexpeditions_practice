@@ -3418,10 +3418,10 @@ def export_r20(path):
 # (6 taller steps, 4-6 stud blocks, joints offset row to row, riser = front faces only), a ruined 3-tier round-arched arcade with
 # a round tower for the island skyline, and a domed palace. The reference c2/c4 frames show ~6 steps where ours had 8, and
 # each block reads as a separate rounded stone (bevel ~0.3).
-def build_stairs21(rise=1.0, n=6, d0=28.0, run=20.0, lat0=4.3, lat1=17.7, bevel=0.3, seed=211):
+def build_stairs21(rise=1.0, n=6, d0=28.0, run=20.0, lat0=4.3, lat1=17.7, bevel=0.3, seed=211, tag="Stairs21"):
     """K_Stairs21_stone / _riser: 4 flights (rot4) of n steps; each step is a row of full-height bevelled blocks 4-6 wide
     with offset joints. Riser = faces whose normal points back along the flight (toward the plaza)."""
-    clear_piece("K_Stairs21_"); clear_piece("Q_")
+    clear_piece(f"K_{tag}_"); clear_piece("Q_")
     rnd = random.Random(seed); tread = run / n; objs = []
     for i in range(n):
         h = rise * (i + 1); dc = d0 + tread * i + tread / 2
@@ -3439,7 +3439,7 @@ def build_stairs21(rise=1.0, n=6, d0=28.0, run=20.0, lat0=4.3, lat1=17.7, bevel=
             for w in ws:
                 o = rbox(f"Q_s{i}_{s}_{x:.1f}", w - 0.1, h, tread - 0.06, bevel=bevel, segs=2, loc=(s * (x + w / 2), h / 2, -dc))
                 objs.append(o); x += w
-    st = merge_objs("K_Stairs21_stone", objs, rot4=True)
+    st = merge_objs(f"K_{tag}_stone", objs, rot4=True)
     # split risers: horizontal faces whose normal points along the flight axis, toward the centre
     bm = bmesh.new(); bm.from_mesh(st.data); bm2 = bm.copy()
     def is_riser(f):
@@ -3450,8 +3450,8 @@ def build_stairs21(rise=1.0, n=6, d0=28.0, run=20.0, lat0=4.3, lat1=17.7, bevel=
     bmesh.ops.delete(bm, geom=[f for f in bm.faces if is_riser(f)], context='FACES')
     bmesh.ops.delete(bm2, geom=[f for f in bm2.faces if not is_riser(f)], context='FACES')
     bm.to_mesh(st.data); bm.free()
-    me = bpy.data.meshes.new("K_Stairs21_riser"); bm2.to_mesh(me); bm2.free()
-    ob = bpy.data.objects.new("K_Stairs21_riser", me); coll().objects.link(ob)
+    me = bpy.data.meshes.new(f"K_{tag}_riser"); bm2.to_mesh(me); bm2.free()
+    ob = bpy.data.objects.new(f"K_{tag}_riser", me); coll().objects.link(ob)
     return [st.name, ob.name]
 
 def build_arcade21(W=26.0, D=3.0, seed=212):
@@ -3523,6 +3523,62 @@ def export_r21(path):
     to_zup_and_uv()
     bpy.ops.object.select_all(action='DESELECT')
     sel = [o for o in bpy.data.objects if o.type == 'MESH' and o.name.startswith(R21_PREFIXES)]
+    for o in sel: o.select_set(True)
+    bpy.context.view_layer.objects.active = sel[0]
+    bpy.ops.export_scene.fbx(filepath=path, use_selection=True, object_types={'MESH'}, apply_unit_scale=True,
+                             mesh_smooth_type='FACE', use_mesh_modifiers=True, axis_forward='-Z', axis_up='Y')
+    return [o.name for o in sel]
+
+# ---------------------------------------------------------------- pass 22 (verify19 items 5, 8): 8 shallower stair steps and a
+# raised bevelled runner slab at each stair foot. Riser count read from the frames: c4 reference dark bands at y 476/509/554/626/755
+# match an 8-step flight (rise 0.75) projected through the c4 camera (487/519/564/632/747); 6 steps give 498/552/647/854. p1 shows
+# 8 bands in the reference against 6 in ours. The runner slab (p5 ref y 380-680 at both stair feet) projects to d ~16.5-28 on the
+# floor: a silver bevelled frame, a thick gold rim, a blue face with a gold Y, a cyan gem near the foot, top rising toward the stairs.
+def build_stairs22():
+    return build_stairs21(rise=0.75, n=8, seed=221, tag="Stairs22")
+
+def _shear_up(o, d0, d1, y_add):
+    """raise the top of a Y-up piece linearly along -Z: + y_add * (d - d0) / (d1 - d0) for vertices above y 0.05"""
+    for v in o.data.vertices:
+        d = -v.co.z
+        if v.co.y > 0.05: v.co.y += y_add * max(0.0, min(1.0, (d - d0) / (d1 - d0)))
+
+def build_runner22(d0=16.5, d1=28.0, W=7.2, h=0.55, rise=0.35):
+    """K_Runner22_silver / _gold / _blue / _gem: one slab per stair foot (rot4), N flight along -Z, lateral x."""
+    clear_piece("K_Runner22_"); clear_piece("R_")
+    L = d1 - d0; dc = (d0 + d1) / 2; sil, gold, blue, gem = [], [], [], []
+    sil.append(rbox("R_sil", W, h, L, bevel=0.28, segs=3, loc=(0, h / 2, -dc)))
+    gold.append(rbox("R_rim", W - 1.1, h + 0.1, L - 1.0, bevel=0.14, segs=2, loc=(0, (h + 0.1) / 2, -dc)))
+    blue.append(rbox("R_face", W - 2.1, h + 0.16, L - 1.9, bevel=0.08, segs=2, loc=(0, (h + 0.16) / 2, -dc)))
+    # gold Y on the blue face: stem from the foot to 60 %, two arms to the stair end, two side lines
+    yt = h + 0.2; ds = d0 + 1.6; dm = d0 + L * 0.6; de = d1 - 1.1
+    gold.append(rbox("R_stem", 0.28, yt, dm - ds, bevel=0.06, segs=1, loc=(0, yt / 2, -(ds + dm) / 2)))
+    for sx in (-1, 1):
+        ax = 1.6 * sx; ln = math.hypot(ax, de - dm); o = rbox(f"R_arm{sx}", 0.28, yt, ln, bevel=0.06, segs=1, loc=(0, yt / 2, 0))
+        o.rotation_euler = (0, math.atan2(ax, de - dm), 0); o.location = (ax / 2, 0, -(dm + de) / 2); gold.append(o)
+        gold.append(rbox(f"R_side{sx}", 0.22, yt, L - 3.0, bevel=0.05, segs=1, loc=(2.0 * sx, yt / 2, -(dc + 0.3))))
+    gem.append(rbox("R_gem", 1.5, h + 0.3, 1.0, bevel=0.45, segs=3, loc=(0, (h + 0.3) / 2, -(d0 + 1.0))))
+    out = []
+    for nm, lst in (("silver", sil), ("gold", gold), ("blue", blue), ("gem", gem)):
+        for o in lst:
+            bpy.context.view_layer.update(); o.data.transform(o.matrix_basis); o.matrix_basis = Matrix.Identity(4)
+            _shear_up(o, d0, d1, rise)
+        out.append(merge_objs(f"K_Runner22_{nm}", lst, rot4=True).name)
+    return out
+
+def build_scale22():
+    clear_piece("K_Scale22_"); return rbox("K_Scale22_stone", 10.0, 10.0, 10.0, 0.01, 1)
+
+R22_PREFIXES = ("K_Scale22_", "K_Stairs22_", "K_Runner22_")
+
+def build_all22():
+    return {"scale": build_scale22().name, "stairs": build_stairs22(), "runner": build_runner22()}
+
+def export_r22(path):
+    """Z-up + UVs (new pieces only), then export ONLY the pass-22 pieces plus the 10-stud cube."""
+    to_zup_and_uv()
+    bpy.ops.object.select_all(action='DESELECT')
+    sel = [o for o in bpy.data.objects if o.type == 'MESH' and o.name.startswith(R22_PREFIXES)]
     for o in sel: o.select_set(True)
     bpy.context.view_layer.objects.active = sel[0]
     bpy.ops.export_scene.fbx(filepath=path, use_selection=True, object_types={'MESH'}, apply_unit_scale=True,
