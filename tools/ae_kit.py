@@ -3143,3 +3143,45 @@ def export_r17(path):
     bpy.ops.export_scene.fbx(filepath=path, use_selection=True, object_types={'MESH'}, apply_unit_scale=True,
                              mesh_smooth_type='OFF', use_mesh_modifiers=True, axis_forward='-Z', axis_up='Y')
     return [o.name for o in sel]
+
+# ---------------------------------------------------------------- pass 18: the arch's outer sweep band (replaces the pass-17
+# forward scroll flanks). Read from the reference c1/c3 frontal frames and the refB17 side view: the dark "flank" is the arch's
+# own outer band, ~3 thick, curving from the crest arms out and down to the floor beside the stair stringer, pale front face with
+# two dark recessed grooves following the curve, a gold edge on the outer rim only. Authored Y-up in the pass-4 diagonal frame.
+def sweep_outline18(f, s, n_arc=16, n_leg=3, cu=5.7, cy=4.5, a0=4.3, b0=4.5, T=3.0):
+    """(u, y) outline at radial fraction f (0 inner, 1 outer) of the side-s band: quarter ellipse centred (s*cu, cy) from the
+    top (u = s*cu) down to (s*(cu+a), cy), then the straight leg to the floor."""
+    a, b = a0 + T * f, b0 + T * f
+    pts = [(s * (cu + a * math.sin(math.pi / 2 * k / n_arc)), cy + b * math.cos(math.pi / 2 * k / n_arc)) for k in range(n_arc + 1)]
+    pts += [(s * (cu + a), cy * (1 - k / n_leg)) for k in range(1, n_leg + 1)]
+    return pts
+
+def build_sweep18(W0=33.0, W1=36.5, rec=0.45):
+    """K_Sweep18_stone / _groove / _gold: rings f 0-0.28, 0.38-0.62, 0.72-1 stone (front at W0); grooves 0.28-0.38 and 0.62-0.72
+    recessed by rec; a gold tube along the outer front edge. Both sides of the arch, mirrored to the 4 corners."""
+    clear_piece("K_Sweep18_"); clear_piece("Q_")
+    G = {"stone": [], "groove": [], "gold": []}
+    for s in (1, -1):
+        for f0, f1, tok in ((0.0, 0.28, "stone"), (0.28, 0.38, "groove"), (0.38, 0.62, "stone"), (0.62, 0.72, "groove"), (0.72, 1.0, "stone")):
+            G[tok].append(arch_band(f"Q_sw{s}_{f0}", sweep_outline18(f1, s), sweep_outline18(f0, s), W0 + (rec if tok == "groove" else 0.0), W1))
+        G["gold"].append(tube_along(f"Q_swGold{s}", [P(u, y, W0 - 0.02) for u, y in sweep_outline18(1.0, s)], 0.22))
+    return [merge_objs(f"K_Sweep18_{k}", v, mirror4=True).name for k, v in G.items() if v]
+
+def build_scale18():
+    clear_piece("K_Scale18_"); return rbox("K_Scale18_stone", 10.0, 10.0, 10.0, 0.01, 1)
+
+R18_PREFIXES = ("K_Scale18_", "K_Sweep18_")
+
+def build_all18():
+    build_scale18(); return build_sweep18()
+
+def export_r18(path):
+    """Z-up + UVs (new pieces only), then export ONLY the pass-18 pieces plus the 10-stud cube."""
+    to_zup_and_uv()
+    bpy.ops.object.select_all(action='DESELECT')
+    sel = [o for o in bpy.data.objects if o.type == 'MESH' and o.name.startswith(R18_PREFIXES)]
+    for o in sel: o.select_set(True)
+    bpy.context.view_layer.objects.active = sel[0]
+    bpy.ops.export_scene.fbx(filepath=path, use_selection=True, object_types={'MESH'}, apply_unit_scale=True,
+                             mesh_smooth_type='FACE', use_mesh_modifiers=True, axis_forward='-Z', axis_up='Y')
+    return [o.name for o in sel]

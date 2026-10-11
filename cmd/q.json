@@ -1,0 +1,1 @@
+{"studio_id": "ae13592b-5ca7-43d3-91a6-9135c14250eb", "datamodel_type": "Edit", "code": "game:GetService(\"Selection\"):Set({})\nreturn \"#plaza \" .. #workspace.Plaza:GetDescendants()\n"}
