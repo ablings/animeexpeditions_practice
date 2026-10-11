@@ -1,0 +1,1 @@
+{"studio_id":"8ce7b1eb-e34e-4233-8e6f-5c0f3cdd6885","datamodel_type":"Edit","code":"local t={} for _,c in ipairs(game.ServerStorage.Kit:GetChildren()) do if c:IsA('MeshPart') then table.insert(t,c.Name..string.format('(%d,%d,%d)',c.Size.X,c.Size.Y,c.Size.Z)) end end table.sort(t) return table.concat(t,' ')"}
