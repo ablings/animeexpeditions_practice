@@ -6,7 +6,7 @@ L.GlobalShadows = true; L.OutdoorAmbient = c(0.662745, 0.647059, 0.721569); L.Sh
 pcall(function() L.LightingStyle = Enum.LightingStyle.Realistic end)
 for _, ch in ipairs(L:GetChildren()) do if not ch:IsA("Sky") then ch:Destroy() end end
 local function new(cls, props) local o = Instance.new(cls); for k, v in pairs(props) do o[k] = v end; o.Parent = L end
-new("Atmosphere", { Density = 0.2, Offset = 0.25, Color = c(0.780392, 0.780392, 0.780392), Decay = c(0.415686, 0.439216, 0.490196), Glare = 0, Haze = 0 })
+new("Atmosphere", { Density = 0.28, Offset = 0.25, Color = c(0.780392, 0.780392, 0.780392), Decay = c(0.415686, 0.439216, 0.490196), Glare = 0, Haze = 0 })
 new("BloomEffect", { Intensity = 1, Size = 56, Threshold = 2 })
 new("ColorCorrectionEffect", { Brightness = 0.01, Contrast = 0.12, Saturation = 0.14 })
 new("SunRaysEffect", { Intensity = 0.15, Spread = 0.7 })
@@ -15,7 +15,9 @@ local sky = L:FindFirstChildOfClass("Sky") or Instance.new("Sky", L); sky.SunAng
 -- which removes the pass-4 corner artefact), uploaded via the file server
 -- pass 12 (brief 12 item 1): own skybox v3 from tex/make_ae_tex12.py: direction-based (seamless across all 6 faces, clouds above 45 deg),
 -- deep cyan zenith, pale hazy horizon. The pass-5 ids were: Up 71892846199507 Dn 78820631398749 Ft 126129044892365 Bk 113669221037411 Lf 106268068341369 Rt 97088461169211
-local SKY = { Up = 105456032048472, Dn = 129874227983478, Ft = 104734433882596, Bk = 85094665805915, Lf = 135391985565861, Rt = 91935391869843 }
+-- pass 26 (brief 26 item 1): own skybox v4 from tex/make_ae_tex26.py variant d (haze to ~10 deg, azure clear sky, dense low cumulus).
+-- The pass-12 ids were: Up 105456032048472 Dn 129874227983478 Ft 104734433882596 Bk 85094665805915 Lf 135391985565861 Rt 91935391869843
+local SKY = { Up = 86697674728745, Dn = 76842875409340, Ft = 94655773202113, Bk = 132148118311790, Lf = 97641134518184, Rt = 132849943400915 }
 for k, id in pairs(SKY) do sky["Skybox" .. k] = "rbxassetid://" .. id end
 sky.CelestialBodiesShown = true
 workspace.StreamingEnabled = false
