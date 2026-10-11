@@ -4508,3 +4508,95 @@ def export_r35(path):
     bpy.ops.export_scene.fbx(filepath=path, use_selection=True, object_types={'MESH'}, apply_unit_scale=True,
                              mesh_smooth_type='FACE', use_mesh_modifiers=True, axis_forward='-Z', axis_up='Y')
     return [o.name for o in sel]
+
+# ============================================================================ pass 37 (notes/fix_brief37.md, verify34_plaza.md)
+# Items 2-3: one stone colour cannot serve the arch. The lit NE front face must go darker (c1 (500,300) 88 -> 60, p5 (560,330)
+# 100 -> 76, c3 (640,500) 161 -> 60) while the back-lit U arms must go lighter (c2 (560,200) 40 -> 100, p1 (120,250) 55 -> 97).
+# So the existing K_Arch20_stone is split by face, without new geometry: per corner (NE/SE/SW/NW, Roblox axes) into
+#   armF  front-facing faces of the U-handle arms (|u| 2.15..3.95 above the sill),
+#   face  every other front-facing face (pale band + crown under the notch),
+#   side  the rest (arm sides and tops, intrados soffit, back),
+# so that Studio can colour each corner and class on its own. Plus K_Groove37_dark: two 0.4-wide recessed grooves along the
+# middle of the light shoulder bands b1 (po..o1) and b2 (o1..o2), proud of the band faces by 0.03 (reads as a dark groove line).
+CORNERS37 = {"NE": (1, -1), "SE": (1, 1), "SW": (-1, 1), "NW": (-1, -1)}
+
+def build_split37(A=A20):
+    for o in [o for o in bpy.data.objects if o.name.startswith("K_Arch37_")]: bpy.data.objects.remove(o, do_unlink=True)
+    src = bpy.data.objects["K_Arch20_stone"]; M = src.matrix_world; zup = bool(src.get("zup"))
+    R3 = M.to_3x3()
+    def yup(v): return (v.x, v.z, -v.y) if zup else (v.x, v.y, v.z)
+    cls = {}
+    for f in src.data.polygons:
+        c = Vector(yup(M @ f.center)); n = Vector(yup((R3 @ f.normal).normalized()))
+        sx = 1 if c.x >= 0 else -1; sz = 1 if c.z >= 0 else -1
+        corner = [k for k, v in CORNERS37.items() if v == (sx, sz)][0]
+        front = n.dot(Vector((-sx, 0, -sz)).normalized()) > 0.7
+        u, w, y = _uwy(M @ f.center) if zup else (None, None, None)
+        arm = abs(u) >= 2.15 and abs(u) <= 3.95 and y > A["top"] - 0.45
+        k = "side" if not front else ("armF" if arm else "face")
+        cls.setdefault(f"{corner}_{k}", []).append(f.index)
+    out = {}
+    for key, idx in cls.items():
+        name = f"K_Arch37_{key}"
+        me = src.data.copy(); me.name = name
+        bm = bmesh.new(); bm.from_mesh(me); bm.faces.ensure_lookup_table()
+        keep = set(idx)
+        bmesh.ops.delete(bm, geom=[f for f in bm.faces if f.index not in keep], context='FACES')
+        bmesh.ops.delete(bm, geom=[v for v in bm.verts if not v.link_faces], context='VERTS')
+        bm.to_mesh(me); bm.free()
+        ob = bpy.data.objects.new(name, me); coll().objects.link(ob); ob.matrix_world = M.copy()
+        if zup: ob["zup"] = 1
+        out[name] = len(idx)
+    return out
+
+def build_groove37(A=A20, wd=0.4):
+    clear_piece("K_Groove37_"); clear_piece("Q_")
+    objs = []
+    for s in (1, -1):
+        po = _arc19(A["a_p"], A["b_p"], s, A)
+        a1, b1, f1 = A["b1"]; a2, b2, f2 = A["b2"]
+        o1 = _arc20(a1, b1, s, f1, A); o2 = _arc20(a2, b2, s, f2, A)
+        for tag, inner, outer, W in (("b1", po, o1, A["Wb1"]), ("b2", o1, o2, A["Wb2"])):
+            def lerp(f): return [(p[0] + (q[0] - p[0]) * f, p[1] + (q[1] - p[1]) * f) for p, q in zip(inner, outer)]
+            # band width varies along the curve; take the groove as wd wide around the middle using the local width
+            mid_i, mid_o = [], []
+            for (pu, py), (qu, qy) in zip(inner, outer):
+                L = math.hypot(qu - pu, qy - py) or 1.0; h = min(0.45, wd / 2 / L)
+                mid_i.append((pu + (qu - pu) * (0.5 - h), py + (qy - py) * (0.5 - h)))
+                mid_o.append((pu + (qu - pu) * (0.5 + h), py + (qy - py) * (0.5 + h)))
+            objs.append(arch_band(f"Q_gr{tag}{s}", mid_o, mid_i, W - 0.03, W + 0.05))
+    return merge_objs("K_Groove37_dark", objs, mirror4=True).name
+
+def build_scale37():
+    clear_piece("K_Scale37_"); return rbox("K_Scale37_stone", 10.0, 10.0, 10.0, 0.01, 1)
+
+R37_PREFIXES = ("K_Scale37_", "K_Arch37_", "K_Groove37_")
+
+def r37_info(path=None):
+    """bbox centres / sizes in authored (= Studio) coordinates and triangle counts of the pass-37 pieces (+ K_Arch20_stone)."""
+    import json
+    info = {}
+    for o in bpy.data.objects:
+        if o.type == 'MESH' and o.name.startswith(R37_PREFIXES + ("K_Arch20_stone",)):
+            vs = [o.matrix_world @ v.co for v in o.data.vertices]
+            lo = [min(v[i] for v in vs) for i in range(3)]; hi = [max(v[i] for v in vs) for i in range(3)]
+            if o.get("zup"):
+                lo, hi = [lo[0], lo[2], -hi[1]], [hi[0], hi[2], -lo[1]]
+            tris = sum(len(p.vertices) - 2 for p in o.data.polygons)
+            info[o.name] = {"c": [round((a + b) / 2, 3) for a, b in zip(lo, hi)], "s": [round(b - a, 3) for a, b in zip(lo, hi)], "tris": tris}
+    if path: json.dump(info, open(path, "w"), indent=1)
+    return info
+
+def build_all37():
+    return {"scale": build_scale37().name, "split": build_split37(), "groove": build_groove37()}
+
+def export_r37(path):
+    """Z-up + UVs (new pieces only), then export ONLY the pass-37 pieces plus the 10-stud cube."""
+    to_zup_and_uv()
+    bpy.ops.object.select_all(action='DESELECT')
+    sel = [o for o in bpy.data.objects if o.type == 'MESH' and o.name.startswith(R37_PREFIXES)]
+    for o in sel: o.select_set(True)
+    bpy.context.view_layer.objects.active = sel[0]
+    bpy.ops.export_scene.fbx(filepath=path, use_selection=True, object_types={'MESH'}, apply_unit_scale=True,
+                             mesh_smooth_type='FACE', use_mesh_modifiers=True, axis_forward='-Z', axis_up='Y')
+    return [o.name for o in sel]
