@@ -3962,3 +3962,147 @@ def export_r24(path):
     bpy.ops.export_scene.fbx(filepath=path, use_selection=True, object_types={'MESH'}, apply_unit_scale=True,
                              mesh_smooth_type='FACE', use_mesh_modifiers=True, axis_forward='-Z', axis_up='Y')
     return [o.name for o in sel]
+
+
+# ---------------------------------------------------------------- pass 25 (round-22 review, notes/fix_brief25.md)
+# Smaller runner Y (0.16 gold outline round a 0.5 core, arms to x +-2.05 = ~60 % of the face, fork at d 37 = ~40 % down the slab in
+# c4, a long stem down to the gem) plus the two long inner gold lines the arms run into; a lobed green crown for the giant tree
+# (4 separate lobes at the pass-24 limb tips and top); a standing fern clump (12 arching fronds with serrated blades, ~4.5 across,
+# ~1.5 tall, double-sided); stair blocks with a smaller chamfer (0.08) and ALL steep faces split into the riser mesh so they can
+# be darkened. Authored in Studio coordinates (crown: origin = trunk foot, as K_Tree24; fern: origin = base centre).
+
+def build_runner25(ds=22.6, df=37.0, d1=39.3, X1=2.05, a=0.25, r=0.08, dl0=23.5, dl1=47.9):
+    """K_RunY25_gold (Y outline tube r 0.08 + two long inner lines at x +-(X1 + a)), K_RunY25_core (three ribbons, 2a wide)."""
+    clear_piece("K_RunY25_"); clear_piece("R_")
+    Y = _youtline24(ds, df, d1, X1, a); Yd = _densify24(Y, 0.3)
+    def ribbon(name, p0, p1, off=0.17):
+        dx, dd = p1[0] - p0[0], p1[1] - p0[1]; L = math.hypot(dx, dd); nx, nd = dd / L * a, -dx / L * a
+        k = max(2, int(L / 0.4)); bm = bmesh.new(); prev = None
+        for i in range(k + 1):
+            x, d = p0[0] + dx * i / k, p0[1] + dd * i / k
+            pr = [bm.verts.new((x + s * nx, _surf23(d + s * nd) + off, -(d + s * nd))) for s in (-1, 1)]
+            if prev:
+                f = bm.faces.new((prev[0], prev[1], pr[1], pr[0])); f.normal_update()
+                if f.normal.y < 0: f.normal_flip()
+            prev = pr
+        return mesh_obj(name, bm, False)
+    core = [ribbon("R_cs", (0.0, ds), (0.0, df + 0.1))]
+    for sx in (-1, 1): core.append(ribbon(f"R_ca{sx}", (0.0, df), (sx * X1, d1), off=0.175))
+    gold = [tube_along("R_yline", [(x, _surf23(d) + 0.2, -d) for x, d in Yd + [Yd[0]]], r, res=4)]
+    xl = X1 + a
+    for sx in (-1, 1):
+        n = int((dl1 - dl0) / 0.4)
+        gold.append(tube_along(f"R_line{sx}", [(sx * xl, _surf23(dl0 + (dl1 - dl0) * k / n) + 0.2, -(dl0 + (dl1 - dl0) * k / n)) for k in range(n + 1)], r, res=4))
+    return [merge_objs("K_RunY25_gold", gold, rot4=True).name, merge_objs("K_RunY25_core", core, rot4=True).name]
+
+def build_crown25(H=86.0, seed=25):
+    """K_Crown25_leaf / _rim: 4 separate lobes (3 limb tips of K_Tree24 + the top), each a tight cluster of 5-6 squashed
+    icospheres (r 5-8, jitter +-6) so the gaps between lobes read; a paler rim cap on the upper half of every second lump."""
+    clear_piece("K_Crown25_"); clear_piece("T_")
+    rng = _rnd24.Random(seed)
+    def axis(t): return 6.0 * math.sin(t * math.pi * 0.9) * t, -4.0 * t * t
+    tips = []
+    for ang, y0, L in ((0.4, 62.0, 26.0), (2.5, 67.0, 22.0), (4.4, 72.0, 20.0)):
+        bx, bz = axis((y0 + 1) / H); tips.append((bx + math.cos(ang) * (L + 2), y0 + 11, bz + math.sin(ang) * (L + 2)))
+    tx, tz = axis(1.0); tips.append((tx, H + 6, tz))
+    leaf, rim = [], []
+    for k, (x, y, z) in enumerate(tips):
+        big = 1.2 if k == 3 else 1.0
+        for j in range(6 if k == 3 else 5):
+            r = rng.uniform(5.0, 8.0) * big
+            c = Vector((x + rng.uniform(-6, 6) * big, y + rng.uniform(-2, 4), z + rng.uniform(-6, 6) * big))
+            bm = bmesh.new(); bmesh.ops.create_icosphere(bm, subdivisions=3, radius=r)
+            for v in bm.verts: v.co = Vector((v.co.x, v.co.y * 0.7, v.co.z)) * (1 + rng.uniform(-0.1, 0.1)) + c
+            leaf.append(mesh_obj(f"T_l{k}_{j}", bm, False))
+            if j % 2 == 0:
+                bm = bmesh.new(); bmesh.ops.create_icosphere(bm, subdivisions=2, radius=r * 1.05)
+                bmesh.ops.delete(bm, geom=[v for v in bm.verts if v.co.y < -0.1 * r], context='VERTS')
+                for v in bm.verts: v.co = Vector((v.co.x, v.co.y * 0.62, v.co.z)) + c + Vector((0, r * 0.25, 0))
+                rim.append(mesh_obj(f"T_r{k}_{j}", bm, False))
+    return [merge_objs("K_Crown25_leaf", leaf).name, merge_objs("K_Crown25_rim", rim).name]
+
+def build_fern25(n=12, L=3.0, seed=251):
+    """K_Fern25_leaf: a standing fern clump. Each frond leaves the base at 50-75 deg, rises, arches over and droops (quadratic
+    in arc length), with a serrated blade (alternating wide/narrow every segment, width 0.45 * sin(pi t)^0.6) and a small twist.
+    Two sheets per frond (one facing up, one down) so it renders from both sides. Origin = base centre."""
+    clear_piece("K_Fern25_"); clear_piece("F_")
+    rng = _rnd24.Random(seed); bm = bmesh.new(); seg = 14
+    for i in range(n):
+        az = 2 * math.pi * i / n + rng.uniform(-0.2, 0.2); el = math.radians(rng.uniform(50, 75)); Lf = L * rng.uniform(0.8, 1.15)
+        d = Vector((math.cos(az), 0, math.sin(az))); side = Vector((-math.sin(az), 0, math.cos(az)))
+        pts = []
+        for k in range(seg + 1):
+            t = k / seg; s = Lf * t
+            h = s * math.sin(el) - 0.5 * s * s / Lf * (0.6 + 0.4 * math.cos(el))
+            pts.append(d * (s * math.cos(el) * 1.1) + Vector((0, max(h, 0.05 * (1 - t)), 0)))
+        for sheet in (0, 1):
+            prev = None
+            for k, p in enumerate(pts):
+                t = k / seg; w = 0.45 * math.sin(math.pi * min(t, 0.98)) ** 0.6 * (1.25 if k % 2 else 0.8)
+                lift = Vector((0, 0.25 * t * (1 if k % 2 else -1) * 0.3 - 0.02 * sheet, 0))
+                a_ = bm.verts.new(p + side * w + lift); b_ = bm.verts.new(p - side * w + lift)
+                if prev:
+                    if sheet == 0: bm.faces.new((prev[0], prev[1], b_, a_))
+                    else: bm.faces.new((a_, b_, prev[1], prev[0]))
+                prev = (a_, b_)
+    ob = mesh_obj("F_fern", bm, False)
+    return [merge_objs("K_Fern25_leaf", [ob]).name]
+
+def build_stairs25(n=7, H=6.0, d0=28.0, run=20.0, lat0=4.3, lat1=17.7, bevel=0.08, gap=0.2):
+    """K_Stairs25_stone / _riser / _joint: the pass-24 blocks with a smaller chamfer (0.08, cut stone, not pillows); every face
+    whose normal is more than 60 deg off vertical goes to the riser mesh (fronts, sides, lower chamfers), so risers can be darker."""
+    clear_piece("K_Stairs25_"); clear_piece("Q_")
+    tread = run / n; rise = H / n; objs = []; jo = []; W = lat1 - lat0
+    for i in range(n):
+        h = rise * (i + 1); dc = d0 + tread * i + tread / 2
+        ws = [W / 3] * 3 if i % 2 == 0 else [W / 6, W / 3, W / 3, W / 6]
+        for s in (-1, 1):
+            x = lat0
+            for w in ws:
+                objs.append(rbox(f"Q_s{i}_{s}_{x:.1f}", w - gap, h, tread - gap, bevel=bevel, segs=1, loc=(s * (x + w / 2), h / 2, -dc)))
+                x += w
+            jo.append(rbox(f"Q_j{i}_{s}", W - 0.02, h - 0.1, tread - 0.02, bevel=0.02, segs=1, loc=(s * (lat0 + W / 2), (h - 0.1) / 2, -dc)))
+    st = merge_objs("K_Stairs25_stone", objs, rot4=True)
+    bm = bmesh.new(); bm.from_mesh(st.data); bm.normal_update(); bm2 = bm.copy(); bm2.normal_update()
+    bmesh.ops.delete(bm, geom=[f for f in bm.faces if f.normal.y < 0.5], context='FACES')
+    bmesh.ops.delete(bm2, geom=[f for f in bm2.faces if f.normal.y >= 0.5], context='FACES')
+    bm.to_mesh(st.data); bm.free()
+    me = bpy.data.meshes.new("K_Stairs25_riser"); bm2.to_mesh(me); bm2.free()
+    ob = bpy.data.objects.new("K_Stairs25_riser", me); coll().objects.link(ob)
+    jt = merge_objs("K_Stairs25_joint", jo, rot4=True)
+    return [st.name, ob.name, jt.name]
+
+def build_scale25():
+    clear_piece("K_Scale25_"); return rbox("K_Scale25_stone", 10.0, 10.0, 10.0, 0.01, 1)
+
+R25_PREFIXES = ("K_Scale25_", "K_RunY25_", "K_Crown25_", "K_Fern25_", "K_Stairs25_")
+
+def r25_info(path=None):
+    """bbox centres / sizes in authored (= Studio) coordinates and triangle counts of the pass-25 pieces."""
+    import json
+    info = {}
+    for o in bpy.data.objects:
+        if o.type == 'MESH' and o.name.startswith(R25_PREFIXES):
+            vs = [o.matrix_world @ v.co for v in o.data.vertices]
+            lo = [min(v[i] for v in vs) for i in range(3)]; hi = [max(v[i] for v in vs) for i in range(3)]
+            if o.get("zup"):
+                lo, hi = [lo[0], lo[2], -hi[1]], [hi[0], hi[2], -lo[1]]
+            tris = sum(len(p.vertices) - 2 for p in o.data.polygons)
+            info[o.name] = {"c": [round((a + b) / 2, 3) for a, b in zip(lo, hi)], "s": [round(b - a, 3) for a, b in zip(lo, hi)], "tris": tris}
+    if path: json.dump(info, open(path, "w"), indent=1)
+    return info
+
+def build_all25():
+    return {"scale": build_scale25().name, "runner": build_runner25(), "crown": build_crown25(), "fern": build_fern25(),
+            "stairs": build_stairs25()}
+
+def export_r25(path):
+    """Z-up + UVs (new pieces only), then export ONLY the pass-25 pieces plus the 10-stud cube."""
+    to_zup_and_uv()
+    bpy.ops.object.select_all(action='DESELECT')
+    sel = [o for o in bpy.data.objects if o.type == 'MESH' and o.name.startswith(R25_PREFIXES)]
+    for o in sel: o.select_set(True)
+    bpy.context.view_layer.objects.active = sel[0]
+    bpy.ops.export_scene.fbx(filepath=path, use_selection=True, object_types={'MESH'}, apply_unit_scale=True,
+                             mesh_smooth_type='FACE', use_mesh_modifiers=True, axis_forward='-Z', axis_up='Y')
+    return [o.name for o in sel]

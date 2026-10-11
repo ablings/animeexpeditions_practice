@@ -1,0 +1,1 @@
+{"studio_id": "8ce7b1eb-e34e-4233-8e6f-5c0f3cdd6885", "datamodel_type": "Edit", "code": "local t = {}\nfor _, f in ipairs(workspace.Plaza.Pass25.Fern25:GetChildren()) do table.insert(t, string.format(\"(%.1f,%.1f,%.1f)\", f.Position.X, f.Position.Y, f.Position.Z)) end\nreturn table.concat(t, \" \")\n"}

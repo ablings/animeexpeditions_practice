@@ -1,0 +1,1 @@
+{"studio_id": "8ce7b1eb-e34e-4233-8e6f-5c0f3cdd6885", "datamodel_type": "Edit", "code": "local t = {} for _, c in ipairs(workspace:GetChildren()) do table.insert(t, c.Name) end\ngame:GetService(\"Selection\"):Set({})\nreturn #workspace.Plaza:GetDescendants() .. \" | \" .. table.concat(t, \", \")\n"}
