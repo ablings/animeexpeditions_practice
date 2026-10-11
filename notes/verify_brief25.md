@@ -25,3 +25,11 @@ Write `C:/Users/aroki/Documents/animeexp_practice/notes/verify25_plaza.md`: per 
 concrete instruction a builder can act on (what to change, roughly how much: sizes/positions in studs estimated from the
 pictures, colours as RGB). End your final message with the per-camera scores, the average, and the top-10.
 
+## Round 25 context
+Round 24 scored 8.83 (notes/verify24_plaza.md; eight cameras at 9, p4/p6/p8/c4 at 8.5). Pass 27 (notes/fix27_plaza.md, new kit
+ae_kit_r27): stairs rebuilt as shorter rounded blocks with visible dark joints; less saturated leaf colour maps on the north and
+north-east trees; the giant tree crown as dark, lobed lumps; three translucent waterfalls and rounded lumps on the north island;
+one in three lagoon trees gold; gate side panels, Story ring, Raid brick and fern colours tuned; floor leaf splats removed.
+Not done: runner Y width, bollards, Summon/Boss Rush facades, gate crystal basins, Story crest, Raid door, west pools.
+Compare against round 24 camera by camera. Captures must be full size: if screen_capture returns a short frame (a Studio panel
+open), say so in the report rather than judging blurred frames.
