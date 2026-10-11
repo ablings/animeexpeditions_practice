@@ -3026,3 +3026,120 @@ def export_r16(path):
     bpy.ops.export_scene.fbx(filepath=path, use_selection=True, object_types={'MESH'}, apply_unit_scale=True,
                              mesh_smooth_type='OFF', use_mesh_modifiers=True, axis_forward='-Z', axis_up='Y')
     return [o.name for o in sel]
+
+# ---------------------------------------------------------------- pass 17: wing flanks (scrolls in front of the arch), hero
+# without the outward shoulder wings, leaf-splat card. Authored straight into Blender Z-up (flagged zup).
+def _yup_to_b(x, y, z):
+    return (x, -z, y)
+
+def flank_top17(w, W0=25.0, W1=33.3):
+    """Scroll top: 2 above the floor at the plaza end (w 25), 8 at the arch front (w 33.3), concave (t^1.7)."""
+    t = max(0.0, min(1.0, (w - W0) / (W1 - W0)))
+    return 2.0 + 6.0 * t ** 1.7
+
+def sweep17(bm, ws, u0, u1, yb, yt, mirror):
+    """Rectangle (u0..u1 x yb(w)..yt(w)) swept along the corner diagonal w, mirrored (mx, mz); closed solid."""
+    rings = []
+    for w in ws:
+        a, b = yb(w), yt(w)
+        ring = []
+        for u, y in ((u0, a), (u1, a), (u1, b), (u0, b)):
+            x, yy, z = P(u, y, w)
+            ring.append(bm.verts.new(_yup_to_b(x * mirror[0], yy, z * mirror[1])))
+        rings.append(ring)
+    fs = []
+    for i in range(len(rings) - 1):
+        A, B = rings[i], rings[i + 1]
+        for k in range(4):
+            fs.append(bm.faces.new((A[k], A[(k + 1) % 4], B[(k + 1) % 4], B[k])))
+    fs.append(bm.faces.new(rings[0])); fs.append(bm.faces.new(rings[-1][::-1]))
+    bmesh.ops.recalc_face_normals(bm, faces=fs)
+
+def _zup_obj(name, bm):
+    clear_piece(name)
+    me = bpy.data.meshes.new(name); bm.to_mesh(me); bm.free()
+    for p in me.polygons: p.use_smooth = False
+    ob = bpy.data.objects.new(name, me); ob["zup"] = 1; coll().objects.link(ob); return ob
+
+def build_flank17(N=18, W0=25.0, W1=33.3):
+    """8 scroll flanks (2 per corner) continuing the arch legs (u 7.6..10) forward to the plaza: slate body, gold top rim
+    0.15 wider each side, two dark recessed bands (offset 1.15 and 2.35 below the top, 0.5 tall) on both faces."""
+    ws = [W0 + (W1 - W0) * i / N for i in range(N + 1)]
+    bms = {k: bmesh.new() for k in ("slate", "groove", "gold")}
+    for mx in (1, -1):
+        for mz in (1, -1):
+            for s in (1, -1):
+                lo, hi = sorted((s * 7.6, s * 10.0))
+                sweep17(bms["slate"], ws, lo, hi, lambda w: 0.0, flank_top17, (mx, mz))
+                sweep17(bms["gold"], ws, lo - 0.15, hi + 0.15, lambda w: flank_top17(w) - 0.05, lambda w: flank_top17(w) + 0.25, (mx, mz))
+                for d in (1.15, 2.35):
+                    wsg = [w for w in ws if flank_top17(w) - d - 0.5 > 0.25]
+                    if len(wsg) < 2: continue
+                    for uf in (lo, hi):
+                        sweep17(bms["groove"], wsg, uf - 0.03, uf + 0.03, lambda w, d=d: flank_top17(w) - d - 0.5, lambda w, d=d: flank_top17(w) - d, (mx, mz))
+    return [_zup_obj("K_Flank17_" + k, bm).name for k, bm in bms.items()]
+
+def build_hero17():
+    """K_Hero17_stone / _gold: copies of the (pass-10) K_Hero_stone / _gold with the 8 outward shoulder wings (Q_wingL/R and
+    their gold strips) deleted: faces whose every vertex lies in a wing strip (|x| 16.9..19.7 by |z| 31..48 at y >= 6, or the
+    swap; gold 16.8..17.1 at y >= 6.62)."""
+    def wing_face(f, gold):
+        for v in f.verts:
+            x, y, z = v.co.x, v.co.z, -v.co.y
+            ax, az = abs(x), abs(z)
+            lo, hi = (16.8, 17.1) if gold else (16.9, 19.7)
+            if y < (6.62 if gold else 5.99): return False
+            if not ((lo <= ax <= hi and 31.0 <= az <= 48.05) or (lo <= az <= hi and 31.0 <= ax <= 48.05)): return False
+        return True
+    out = {}
+    for tok in ("stone", "gold"):
+        src = bpy.data.objects["K_Hero_" + tok]; name = "K_Hero17_" + tok
+        clear_piece(name)
+        me = src.data.copy(); me.name = name
+        ob = bpy.data.objects.new(name, me); ob["zup"] = 1; coll().objects.link(ob); ob.matrix_world = src.matrix_world.copy()
+        bm = bmesh.new(); bm.from_mesh(me)
+        dead = [f for f in bm.faces if wing_face(f, tok == "gold")]
+        bmesh.ops.delete(bm, geom=dead, context='FACES')
+        bmesh.ops.delete(bm, geom=[v for v in bm.verts if not v.link_faces], context='VERTS')
+        bm.to_mesh(me); bm.free(); out[name] = len(dead)
+    return out
+
+def build_splat17(seed=1717, n=48):
+    """Ragged leaf splat about 4.6 across (Z-up, flat): a lobed core (r 1.55 +- 0.35, 3 lobes, jitter) 0.06 above a fringe
+    disc whose radius alternates long/short teeth (+0.75 / +0.25, + up to 0.35). Both double-sided."""
+    import random
+    rng = random.Random(seed)
+    core = [1.55 + 0.35 * math.sin(3 * 2 * math.pi * i / n + 0.7) + rng.uniform(-0.15, 0.15) for i in range(n)]
+    rim = [core[i] + (0.75 if i % 2 == 0 else 0.25) + rng.uniform(0, 0.35) for i in range(n)]
+    def disc(bm, rr, y, flip):
+        c = bm.verts.new((0, 0, y))
+        ring = [bm.verts.new((rr[i] * math.cos(2 * math.pi * i / n), rr[i] * math.sin(2 * math.pi * i / n), y)) for i in range(n)]
+        for i in range(n):
+            bm.faces.new((c, ring[(i + 1) % n], ring[i]) if flip else (c, ring[i], ring[(i + 1) % n]))
+    names = []
+    for k, rr, y in (("core", core, 0.06), ("rim", rim, 0.0)):
+        bm = bmesh.new(); disc(bm, rr, y, False); disc(bm, rr, y - 0.02, True)
+        names.append(_zup_obj("K_Splat17_" + k, bm).name)
+    return names
+
+def build_scale17():
+    clear_piece("K_Scale17_")
+    bm = bmesh.new(); bmesh.ops.create_cube(bm, size=10.0)
+    return _zup_obj("K_Scale17_stone", bm).name
+
+R17_PREFIXES = ("K_Scale17_", "K_Flank17_", "K_Hero17_", "K_Splat17_")
+
+def build_all17():
+    build_scale17(); h = build_hero17(); f = build_flank17(); s = build_splat17()
+    return {"hero17_deleted": h, "flank": f, "splat": s}
+
+def export_r17(path):
+    """UVs on the new pieces (all authored Z-up), then export ONLY the pass-17 pieces plus the 10-stud cube."""
+    to_zup_and_uv()
+    bpy.ops.object.select_all(action='DESELECT')
+    sel = [o for o in bpy.data.objects if o.type == 'MESH' and o.name.startswith(R17_PREFIXES)]
+    for o in sel: o.select_set(True)
+    bpy.context.view_layer.objects.active = sel[0]
+    bpy.ops.export_scene.fbx(filepath=path, use_selection=True, object_types={'MESH'}, apply_unit_scale=True,
+                             mesh_smooth_type='OFF', use_mesh_modifiers=True, axis_forward='-Z', axis_up='Y')
+    return [o.name for o in sel]
